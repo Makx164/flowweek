@@ -715,6 +715,30 @@ export default function App() {
     if (shifted) setSessions(prev => prev.map(s => s.id === sess.id ? shifted : s));
     else flash(delta < 0 ? "Kein freier Slot früher." : "Kein freier Slot später.");
   };
+
+  const moveSession = (sessId, newDay) => {
+    setSessions(prev => {
+      const sess = prev.find(s => s.id === sessId);
+      if (!sess || sess.day === newDay) return prev;
+      const others = prev.filter(s => s.id !== sessId);
+      const occ = buildOccupied(others, availability.busy, newDay);
+      const start = slotFree(occ, sess.start, sess.start + sess.durationMin)
+        ? sess.start
+        : findSlot(sess.durationMin, [availability.wakeStart, availability.wakeEnd], occ);
+      if (start === null) { flash("Kein freier Slot an diesem Tag."); return prev; }
+      return [...others, { ...sess, day: newDay, start }];
+    });
+  };
+
+  const addManualSession = (sess) => {
+    setSessions(prev => [...prev, { ...sess, id: uid(), status: "planned" }]);
+    flash("Einheit hinzugefügt ✓");
+  };
+
+  const editSession = (id, patch) => {
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
+    flash("Gespeichert ✓");
+  };
   const rescheduleSession = (sess) => {
     const g = goalById(sess.goalId);
     const others = sessions.filter(s => s.id !== sess.id);
@@ -767,7 +791,7 @@ export default function App() {
             <AppHeader level={level} xp={stats.xp} dark={dark} setDark={setDark} />
             <main className="fw-main">
               {view === "today"    && <TodayView {...{ goals, sessions, stats, level, setActive, completeSession, skipSession, goalById }} />}
-              {view === "week"     && <WeekView  {...{ goals, sessions, runPlan, acceptSuggestion, acceptAll, skipSession, rescheduleSession, removeSession, completeSession, setActive, goalById, downloadIcs, googleLink, shiftSess }} />}
+              {view === "week"     && <WeekView  {...{ goals, sessions, availability, runPlan, acceptSuggestion, acceptAll, skipSession, rescheduleSession, removeSession, completeSession, setActive, goalById, downloadIcs, googleLink, shiftSess, moveSession, addManualSession, editSession }} />}
               {view === "goals"    && <GoalsView {...{ goals, setGoals, stats, weekHistory }} />}
               {view === "settings" && <SettingsView {...{ availability, setAvailability, pomo, setPomo, dark, setDark, notificationsEnabled, setNotificationsEnabled, requestNotifPermission, lang, setLang, user, skippedAuth, handleSkipAuth, reset: () => { setOnboarded(false); setGoals([]); setSessions([]); setWeekHistory([]); setStats({ xp:0,done:0,streaks:{},morningDone:false,currentWeekKey:getMondayKey() }); cloudSyncedRef.current=false; }}} />}
             </main>
@@ -1316,11 +1340,32 @@ function SessionRow({ sess, goal, onStart, onDone, onSkip, compact }) {
 }
 
 /* --------------------------------- week ---------------------------------- */
-function WeekView({ goals, sessions, runPlan, acceptAll, acceptSuggestion, skipSession,
-  rescheduleSession, removeSession, completeSession, setActive, goalById, shiftSess }) {
+function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSuggestion, skipSession,
+  rescheduleSession, removeSession, completeSession, setActive, goalById, shiftSess,
+  moveSession, addManualSession, editSession }) {
   const t = useT();
+  const [dragId, setDragId]       = useState(null);
+  const [dragOver, setDragOver]   = useState(null);
+  const [modal, setModal]         = useState(null); // { mode:"add"|"edit", day?, sess? }
+
   const hasSuggestions = sessions.some(s => s.status === "suggested");
   const planned = sessions.filter(s => s.status === "planned" || s.status === "done");
+
+  const handleDragStart = (e, id) => {
+    setDragId(id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+  const handleDragOver = (e, dayIdx) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOver(dayIdx);
+  };
+  const handleDrop = (e, dayIdx) => {
+    e.preventDefault();
+    if (dragId) moveSession(dragId, dayIdx);
+    setDragId(null); setDragOver(null);
+  };
+
   return (
     <div className="fw-stack">
       <div className="fw-week-bar">
@@ -1338,24 +1383,43 @@ function WeekView({ goals, sessions, runPlan, acceptAll, acceptSuggestion, skipS
       {t("daysFull").map((dayName, i) => {
         const day = sessions.filter(s => s.day === i && s.status !== "skipped").sort((a,b) => a.start - b.start);
         const isToday = i === todayIndex();
+        const isOver  = dragOver === i;
         return (
-          <section key={i} className={isToday ? "fw-day today" : "fw-day"}>
+          <section key={i}
+            className={["fw-day", isToday && "today", isOver && "drag-over"].filter(Boolean).join(" ")}
+            onDragOver={e => handleDragOver(e, i)}
+            onDragLeave={() => setDragOver(null)}
+            onDrop={e => handleDrop(e, i)}>
             <div className="fw-day-h">
               <span>{dayName}</span>
-              {isToday && <em>{t("navToday")}</em>}
+              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                {isToday && <em>{t("navToday")}</em>}
+                <button className="fw-day-add" onClick={() => setModal({ mode:"add", day:i })} title="Einheit hinzufügen">
+                  <Plus size={14}/>
+                </button>
+              </div>
             </div>
-            {day.length === 0 ? <div className="fw-day-empty">{t("free")}</div> : (
-              day.map(s => {
+            {day.length === 0
+              ? <div className="fw-day-empty">{isOver ? "Hier ablegen ↓" : t("free")}</div>
+              : day.map(s => {
                 const goal = goalById(s.goalId);
-                if (!goal) return null;
-                const [c1, c2] = ACCENTS[goal.color];
-                const I = TYPES[goal.type].icon;
+                const name  = goal?.name ?? s.customName ?? "?";
+                const color = goal?.color ?? s.customColor ?? "violet";
+                const itype = goal?.type  ?? s.customType  ?? "habit";
+                const [c1, c2] = ACCENTS[color];
+                const I = s.customIconId ? iconById(s.customIconId) : (TYPES[itype]?.icon ?? Sparkles);
                 const suggested = s.status === "suggested";
+                const isDragging = dragId === s.id;
                 return (
-                  <div key={s.id} className={suggested ? "fw-week-card suggested" : "fw-week-card"}>
+                  <div key={s.id}
+                    draggable={s.status !== "done"}
+                    onDragStart={e => handleDragStart(e, s.id)}
+                    onDragEnd={() => { setDragId(null); setDragOver(null); }}
+                    className={["fw-week-card", suggested && "suggested", isDragging && "dragging"].filter(Boolean).join(" ")}>
+                    <div className="fw-drag-handle" aria-hidden>⠿</div>
                     <div className="fw-wc-ico" style={{ background:`linear-gradient(135deg,${c1},${c2})` }}><I size={16}/></div>
                     <div className="fw-wc-body">
-                      <div className="fw-wc-title">{goal.name}{s.status==="done"&&<Check size={14}/>}</div>
+                      <div className="fw-wc-title">{name}{s.status==="done"&&<Check size={14}/>}</div>
                       <div className="fw-wc-sub">{minToLabel(s.start)} · {s.durationMin} min</div>
                     </div>
                     <div className="fw-wc-actions">
@@ -1368,10 +1432,10 @@ function WeekView({ goals, sessions, runPlan, acceptAll, acceptSuggestion, skipS
                           <button className="fw-mini no" onClick={() => removeSession(s.id)}><X size={15}/></button>
                         </>
                       ) : s.status === "done" ? (
-                        <a className="fw-mini g" href={googleLink(s,goal.name)} target="_blank" rel="noreferrer"><Calendar size={15}/></a>
+                        <a className="fw-mini g" href={googleLink(s, name)} target="_blank" rel="noreferrer"><Calendar size={15}/></a>
                       ) : (
                         <>
-                          <a className="fw-mini g" href={googleLink(s,goal.name)} target="_blank" rel="noreferrer"><Calendar size={15}/></a>
+                          <button className="fw-mini" onClick={() => setModal({ mode:"edit", sess:s })}><Pencil size={14}/></button>
                           <button className="fw-mini" onClick={() => setActive(s)}><Play size={15}/></button>
                           <button className="fw-mini ok" onClick={() => completeSession(s)}><Check size={15}/></button>
                           <button className="fw-mini no" onClick={() => skipSession(s)}><X size={15}/></button>
@@ -1381,10 +1445,144 @@ function WeekView({ goals, sessions, runPlan, acceptAll, acceptSuggestion, skipS
                   </div>
                 );
               })
-            )}
+            }
           </section>
         );
       })}
+
+      {modal && (
+        <SessionModal
+          modal={modal}
+          goals={goals}
+          sessions={sessions}
+          availability={availability}
+          onAdd={addManualSession}
+          onEdit={editSession}
+          onClose={() => setModal(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function SessionModal({ modal, goals, sessions, availability, onAdd, onEdit, onClose }) {
+  const t = useT();
+  const isEdit = modal.mode === "edit";
+  const sess   = modal.sess;
+
+  const existingGoal = isEdit ? goals.find(g => g.id === sess?.goalId) : null;
+
+  const [day,         setDay]         = useState(isEdit ? sess.day         : modal.day ?? todayIndex());
+  const [startH,      setStartH]      = useState(isEdit ? Math.floor(sess.start/60) : 9);
+  const [startM,      setStartM]      = useState(isEdit ? sess.start%60   : 0);
+  const [durationMin, setDurationMin] = useState(isEdit ? sess.durationMin : 30);
+  const [goalId,      setGoalId]      = useState(isEdit ? (sess.goalId ?? "") : (goals[0]?.id ?? ""));
+  const [customName,  setCustomName]  = useState(isEdit ? (sess.customName ?? "") : "");
+  const [customColor, setCustomColor] = useState(isEdit ? (sess.customColor ?? "violet") : "violet");
+  const [customIcon,  setCustomIcon]  = useState(isEdit ? (sess.customIconId ?? "star") : "star");
+
+  const useCustom = goalId === "";
+
+  const handleSave = () => {
+    const start = startH * 60 + startM;
+    if (isEdit) {
+      const patch = { day, start, durationMin };
+      if (!sess.goalId) { patch.customName = customName; patch.customColor = customColor; patch.customIconId = customIcon; }
+      onEdit(sess.id, patch);
+    } else {
+      if (useCustom) {
+        onAdd({ goalId: null, customName: customName || "Einheit", customColor, customIconId: customIcon, day, start, durationMin });
+      } else {
+        onAdd({ goalId, day, start, durationMin });
+      }
+    }
+    onClose();
+  };
+
+  return (
+    <div className="fw-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="fw-session-modal">
+        <div className="fw-session-modal-header">
+          <strong>{isEdit ? "Einheit bearbeiten" : "Einheit hinzufügen"}</strong>
+          <button className="fw-mini" onClick={onClose}><X size={16}/></button>
+        </div>
+
+        {/* Goal picker — only for new sessions */}
+        {!isEdit && (
+          <div className="fw-sm-group">
+            <label>Ziel</label>
+            <select value={goalId} onChange={e => setGoalId(e.target.value)}>
+              {goals.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              <option value="">— Eigener Eintrag —</option>
+            </select>
+          </div>
+        )}
+
+        {/* Custom name + icon when no goal */}
+        {(!isEdit || !sess?.goalId) && useCustom && (
+          <>
+            <div className="fw-sm-group">
+              <label>Name</label>
+              <input value={customName} onChange={e => setCustomName(e.target.value)} placeholder="z.B. Spaziergang" />
+            </div>
+            <div className="fw-sm-group">
+              <label>Icon</label>
+              <div className="fw-cg-icons">
+                {CUSTOM_ICONS.slice(0,8).map(({ id, Ic }) => {
+                  const [c1,c2] = ACCENTS[customColor];
+                  return (
+                    <button key={id} type="button" onClick={() => setCustomIcon(id)}
+                      className={customIcon===id?"fw-cg-icon sel":"fw-cg-icon"}
+                      style={customIcon===id?{background:`linear-gradient(135deg,${c1},${c2})`,color:"#fff"}:{}}>
+                      <Ic size={15}/>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="fw-sm-group">
+              <label>Farbe</label>
+              <div className="fw-goal-colors" style={{ marginTop:0 }}>
+                {ACCENT_KEYS.map(k => (
+                  <button key={k} type="button" onClick={() => setCustomColor(k)}
+                    className={customColor===k?"fw-dot sel":"fw-dot"}
+                    style={{ background:`linear-gradient(135deg,${ACCENTS[k][0]},${ACCENTS[k][1]})` }} />
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Day */}
+        <div className="fw-sm-group">
+          <label>Tag</label>
+          <select value={day} onChange={e => setDay(+e.target.value)}>
+            {t("daysFull").map((d,i) => <option key={i} value={i}>{d}</option>)}
+          </select>
+        </div>
+
+        {/* Time */}
+        <div className="fw-sm-row">
+          <div className="fw-sm-group" style={{ flex:1 }}>
+            <label>Uhrzeit</label>
+            <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+              <input type="number" min="0" max="23" value={startH} onChange={e => setStartH(+e.target.value)} style={{ width:56, textAlign:"center" }} />
+              <span style={{ color:"var(--muted)" }}>:</span>
+              <select value={startM} onChange={e => setStartM(+e.target.value)} style={{ width:64 }}>
+                {[0,15,30,45].map(m => <option key={m} value={m}>{pad(m)}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="fw-sm-group" style={{ flex:1 }}>
+            <label>Dauer (min)</label>
+            <input type="number" min="5" step="5" value={durationMin} onChange={e => setDurationMin(+e.target.value)} />
+          </div>
+        </div>
+
+        <button className="fw-btn solid wide" style={{ marginTop:8 }} onClick={handleSave}>
+          <Check size={16}/> {isEdit ? "Speichern" : "Hinzufügen"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -2074,6 +2272,26 @@ const CSS = `
 .fw-cg-icon:hover{border-color:#7c5cff}
 .fw-cg-icon.sel{border-color:transparent}
 .fw-cg-row{display:flex;align-items:center;gap:10px}
+
+/* drag & drop */
+.fw-day.drag-over{outline:2px solid #7c5cff;background:rgba(124,92,255,.05)}
+.fw-week-card.dragging{opacity:.4}
+.fw-week-card[draggable=true]{cursor:grab}
+.fw-week-card[draggable=true]:active{cursor:grabbing}
+.fw-drag-handle{color:var(--muted);font-size:14px;margin-right:2px;cursor:grab;user-select:none;line-height:1}
+.fw-day-add{border:none;background:none;color:var(--muted);cursor:pointer;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;transition:.15s}
+.fw-day-add:hover{background:rgba(124,92,255,.12);color:#7c5cff}
+
+/* session modal */
+.fw-session-modal{background:var(--card);border-radius:24px 24px 0 0;padding:22px 20px 32px;width:100%;max-width:560px;position:fixed;bottom:0;left:50%;transform:translateX(-50%);box-shadow:0 -12px 40px rgba(0,0,0,.25);z-index:55;animation:fw-slide-up .25s ease}
+@keyframes fw-slide-up{from{transform:translateX(-50%) translateY(100%)}to{transform:translateX(-50%) translateY(0)}}
+.fw-session-modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.fw-session-modal-header strong{font-family:'Outfit';font-weight:800;font-size:18px}
+.fw-sm-group{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.fw-sm-group label{font-size:11.5px;font-weight:700;color:var(--muted)}
+.fw-sm-group select,.fw-sm-group input{border:1.5px solid var(--line);background:var(--card2);border-radius:11px;padding:9px 11px;font-size:14px;color:var(--text);width:100%}
+.fw-sm-group select:focus,.fw-sm-group input:focus{outline:none;border-color:#7c5cff}
+.fw-sm-row{display:flex;gap:12px}
 
 /* collapsible panel */
 .fw-collapsible-header{width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;cursor:pointer;padding:0;color:var(--muted)}
