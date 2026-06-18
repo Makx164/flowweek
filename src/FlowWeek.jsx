@@ -897,49 +897,53 @@ function Onboarding({ onDone, fbReady }) {
               {t("onbStartFree")} <ArrowRight size={18} />
             </button>
 
-            {/* Auth section — only when Firebase is configured */}
-            {fbReady && (
-              <>
-                <div className="fw-splash-or"><span>oder anmelden</span></div>
+            {/* Auth section — always visible */}
+            <div className="fw-splash-or"><span>oder anmelden</span></div>
 
-                {/* Email form */}
-                {emailExpanded ? (
-                  <form className="fw-email-form" onSubmit={handleEmail}>
-                    <input type="email" placeholder="E-Mail" value={email} required
-                      onChange={e => setEmail(e.target.value)} />
-                    <input type="password" placeholder="Passwort" value={password} required minLength={6}
-                      onChange={e => setPassword(e.target.value)} />
-                    <div className="fw-email-mode">
-                      <button type="button" className={emailMode==="signin"?"fw-mode-btn active":"fw-mode-btn"}
-                        onClick={() => setEmailMode("signin")}>Anmelden</button>
-                      <button type="button" className={emailMode==="signup"?"fw-mode-btn active":"fw-mode-btn"}
-                        onClick={() => setEmailMode("signup")}>Registrieren</button>
-                    </div>
-                    {authError && <div className="fw-auth-error">{authError}</div>}
-                    <button type="submit" className="fw-btn solid wide" disabled={authLoading==="email"}>
-                      {authLoading==="email" ? "…" : emailMode==="signin" ? "Anmelden" : "Konto erstellen"}
-                    </button>
-                    <button type="button" className="fw-btn ghost wide" style={{ marginTop:6 }}
-                      onClick={() => { setEmailExpanded(false); setAuthError(""); }}>Zurück</button>
-                  </form>
-                ) : (
-                  <button className="fw-splash-email-btn" onClick={() => setEmailExpanded(true)}>
-                    Mit E-Mail anmelden
-                  </button>
-                )}
-
-                {/* Google + Apple */}
-                <div className="fw-splash-socials">
-                  <button className="fw-social-btn" onClick={handleGoogle} disabled={!!authLoading}>
-                    <GoogleSvg /> {authLoading==="google" ? "…" : "Google"}
-                  </button>
-                  <button className="fw-social-btn apple" onClick={handleApple} disabled={!!authLoading}>
-                    <AppleSvg /> {authLoading==="apple" ? "…" : "Apple"}
-                  </button>
-                </div>
-                {authError && !emailExpanded && <div className="fw-auth-error">{authError}</div>}
-              </>
+            {!fbReady && (
+              <div className="fw-auth-notice">
+                Anmeldung noch nicht konfiguriert — starte einfach ohne Konto.
+              </div>
             )}
+
+            {/* Email form */}
+            {fbReady && (emailExpanded ? (
+              <form className="fw-email-form" onSubmit={handleEmail}>
+                <input type="email" placeholder="E-Mail" value={email} required
+                  onChange={e => setEmail(e.target.value)} />
+                <input type="password" placeholder="Passwort" value={password} required minLength={6}
+                  onChange={e => setPassword(e.target.value)} />
+                <div className="fw-email-mode">
+                  <button type="button" className={emailMode==="signin"?"fw-mode-btn active":"fw-mode-btn"}
+                    onClick={() => setEmailMode("signin")}>Anmelden</button>
+                  <button type="button" className={emailMode==="signup"?"fw-mode-btn active":"fw-mode-btn"}
+                    onClick={() => setEmailMode("signup")}>Registrieren</button>
+                </div>
+                {authError && <div className="fw-auth-error">{authError}</div>}
+                <button type="submit" className="fw-btn solid wide" disabled={authLoading==="email"}>
+                  {authLoading==="email" ? "…" : emailMode==="signin" ? "Anmelden" : "Konto erstellen"}
+                </button>
+                <button type="button" className="fw-btn ghost wide" style={{ marginTop:6 }}
+                  onClick={() => { setEmailExpanded(false); setAuthError(""); }}>Zurück</button>
+              </form>
+            ) : (
+              <button className="fw-splash-email-btn" onClick={() => setEmailExpanded(true)}>
+                Mit E-Mail anmelden
+              </button>
+            ))}
+
+            {/* Google + Apple — always shown, disabled without Firebase */}
+            <div className="fw-splash-socials">
+              <button className="fw-social-btn" onClick={fbReady ? handleGoogle : undefined}
+                disabled={!!authLoading} style={!fbReady ? { opacity:.4, cursor:"default" } : {}}>
+                <GoogleSvg /> {authLoading==="google" ? "…" : "Google"}
+              </button>
+              <button className="fw-social-btn apple" onClick={fbReady ? handleApple : undefined}
+                disabled={!!authLoading} style={!fbReady ? { opacity:.4, cursor:"default" } : {}}>
+                <AppleSvg /> {authLoading==="apple" ? "…" : "Apple"}
+              </button>
+            </div>
+            {authError && !emailExpanded && <div className="fw-auth-error">{authError}</div>}
 
             <p className="fw-splash-hint">{t("onbHint")}</p>
           </>
@@ -1886,6 +1890,7 @@ const CSS = `
 .fw-mode-btn{flex:1;border:1.5px solid var(--line);background:none;border-radius:10px;padding:8px;font-size:13px;font-weight:700;cursor:pointer;color:var(--muted);transition:.15s}
 .fw-mode-btn.active{border-color:#7c5cff;color:#7c5cff;background:rgba(124,92,255,.1)}
 .fw-auth-error{font-size:12.5px;color:#ff5a5a;text-align:center;padding:2px 0}
+.fw-auth-notice{font-size:12px;color:var(--muted);text-align:center;padding:6px 10px;background:var(--card2);border-radius:10px;margin-bottom:6px}
 
 /* calendar upload */
 .fw-cal-upload-row{display:flex;align-items:center;gap:6px;margin-bottom:8px}
