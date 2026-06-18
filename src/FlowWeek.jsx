@@ -7,6 +7,8 @@ import {
   Brain, Droplet, Clock, Pause, Award, Download, ArrowRight,
   Bell, BellOff, BarChart2, Globe, User, LogOut,
   ChevronLeft, ChevronRight, ImageIcon,
+  Star, Heart, Music, Coffee, Zap, Bike, Pencil, Leaf, Smile,
+  Wind, Mail, Info, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { fbReady, onAuth, signInGoogle, signInApple, signInEmail, signUpEmail, signOutUser, loadCloud, saveCloud } from "./firebase.js";
 
@@ -36,6 +38,26 @@ const TEMPLATES = [
   { name: "Wasser trinken", type: "habit", color: "blue",   perWeek: 7, durationMin: 5,  pref: "any",       icon: Droplet },
   { name: "Früh aufstehen", type: "habit", color: "amber",  perWeek: 7, durationMin: 5,  pref: "morning",   icon: Sun },
 ];
+
+const CUSTOM_ICONS = [
+  { id:"star",     Ic: Star },
+  { id:"heart",    Ic: Heart },
+  { id:"zap",      Ic: Zap },
+  { id:"flame",    Ic: Flame },
+  { id:"music",    Ic: Music },
+  { id:"coffee",   Ic: Coffee },
+  { id:"book",     Ic: BookOpen },
+  { id:"brain",    Ic: Brain },
+  { id:"dumbbell", Ic: Dumbbell },
+  { id:"bike",     Ic: Bike },
+  { id:"droplet",  Ic: Droplet },
+  { id:"pencil",   Ic: Pencil },
+  { id:"leaf",     Ic: Leaf },
+  { id:"smile",    Ic: Smile },
+  { id:"wind",     Ic: Wind },
+  { id:"target",   Ic: Target },
+];
+const iconById = (id) => (CUSTOM_ICONS.find(x => x.id === id) ?? CUSTOM_ICONS[0]).Ic;
 
 /* ------------------------------- i18n ------------------------------------ */
 const T = {
@@ -141,6 +163,16 @@ const T = {
     authSkip: "Ohne Konto fortfahren",
     authNote: "Ohne Konto werden deine Daten nur lokal auf diesem Gerät gespeichert.",
     cloudLoaded: "Cloud-Daten geladen ✓",
+    customGoalTitle: "Eigenes Ziel",
+    customGoalName: "Name des Ziels",
+    customGoalDesc: "Beschreibung (optional)",
+    customGoalAdd: "Hinzufügen",
+    impressumTitle: "Impressum",
+    impressumBody: "[Dein Name / Firmenname]\n[Straße Hausnummer]\n[PLZ Ort], [Land]\n\nE-Mail: [deine@email.de]\nTelefon: [+49 ...]\n\nVerantwortlich für den Inhalt nach § 55 Abs. 2 RStV:\n[Dein Name], [Anschrift wie oben]",
+    contactTitle: "Kontakt",
+    contactLead: "Fragen, Feedback oder Bugs? Schreib uns gerne.",
+    contactBtn: "E-Mail schreiben",
+    contactEmail: "kontakt@flowweek.app",
   },
   en: {
     days:     ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
@@ -232,6 +264,16 @@ const T = {
     authSkip: "Continue without account",
     authNote: "Without an account your data is only stored locally on this device.",
     cloudLoaded: "Cloud data loaded ✓",
+    customGoalTitle: "Custom goal",
+    customGoalName: "Goal name",
+    customGoalDesc: "Description (optional)",
+    customGoalAdd: "Add",
+    impressumTitle: "Legal notice",
+    impressumBody: "[Your name / company]\n[Street, number]\n[ZIP city], [Country]\n\nEmail: [your@email.com]\nPhone: [+1 ...]\n\nResponsible for content: [Your name]",
+    contactTitle: "Contact",
+    contactLead: "Questions, feedback or bugs? We'd love to hear from you.",
+    contactBtn: "Send an email",
+    contactEmail: "contact@flowweek.app",
   },
 };
 
@@ -969,6 +1011,10 @@ function Onboarding({ onDone, fbReady }) {
                 );
               })}
             </div>
+
+            {/* Custom goal box */}
+            <CustomGoalBox onAdd={(g) => setPicked(prev => [...prev, g])} />
+
             <div className="fw-onb-row">
               <button className="fw-btn ghost" onClick={() => setStep(0)}>{t("onbBack")}</button>
               <button className="fw-btn solid" disabled={!picked.length} onClick={() => setStep(2)}>
@@ -1080,6 +1126,99 @@ function Onboarding({ onDone, fbReady }) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ----------------------------- custom goal box --------------------------- */
+function CustomGoalBox({ onAdd }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [desc, setDesc] = useState("");
+  const [iconId, setIconId] = useState("star");
+  const [color, setColor] = useState("violet");
+  const [perWeek, setPerWeek] = useState(3);
+  const [durationMin, setDurationMin] = useState(30);
+  const [pref, setPref] = useState("any");
+  const [type, setType] = useState("habit");
+
+  const reset = () => { setName(""); setDesc(""); setIconId("star"); setColor("violet"); setPerWeek(3); setDurationMin(30); setPref("any"); setType("habit"); setOpen(false); };
+  const handleAdd = () => {
+    if (!name.trim()) return;
+    onAdd({ id: uid(), name: name.trim(), desc, iconId, color, type, perWeek, durationMin, pref });
+    reset();
+  };
+
+  const [c1, c2] = ACCENTS[color];
+  const I = iconById(iconId);
+
+  return (
+    <div className="fw-custom-goal">
+      <button className="fw-custom-goal-toggle" onClick={() => setOpen(o => !o)}>
+        <div className="fw-custom-goal-ico" style={{ background:`linear-gradient(135deg,${c1},${c2})` }}>
+          <I size={16} />
+        </div>
+        <span>{t("customGoalTitle")}</span>
+        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      </button>
+
+      {open && (
+        <div className="fw-custom-goal-form">
+          <input className="fw-cg-name" placeholder={t("customGoalName")} value={name}
+            onChange={e => setName(e.target.value)} />
+          <input className="fw-cg-desc" placeholder={t("customGoalDesc")} value={desc}
+            onChange={e => setDesc(e.target.value)} />
+
+          {/* Icon picker */}
+          <div className="fw-cg-icons">
+            {CUSTOM_ICONS.map(({ id, Ic }) => (
+              <button key={id} onClick={() => setIconId(id)}
+                className={iconId === id ? "fw-cg-icon sel" : "fw-cg-icon"}
+                style={iconId === id ? { background:`linear-gradient(135deg,${c1},${c2})`, color:"#fff" } : {}}>
+                <Ic size={16} />
+              </button>
+            ))}
+          </div>
+
+          {/* Color + type + rhythm */}
+          <div className="fw-cg-row">
+            <div className="fw-goal-colors" style={{ marginTop:0 }}>
+              {ACCENT_KEYS.map(k => (
+                <button key={k} onClick={() => setColor(k)}
+                  className={color === k ? "fw-dot sel" : "fw-dot"}
+                  style={{ background:`linear-gradient(135deg,${ACCENTS[k][0]},${ACCENTS[k][1]})` }} />
+              ))}
+            </div>
+          </div>
+
+          <div className="fw-goal-grid" style={{ marginTop:10 }}>
+            <label>{t("typeLabel")}
+              <select value={type} onChange={e => setType(e.target.value)}>
+                {Object.entries(t("types")).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </label>
+            <label>{t("perWeekLabel")}
+              <input type="number" min="1" max="7" value={perWeek} onChange={e => setPerWeek(+e.target.value)} />
+            </label>
+            <label>{t("minutesLabel")}
+              <input type="number" min="5" step="5" value={durationMin} onChange={e => setDurationMin(+e.target.value)} />
+            </label>
+            <label>{t("timeLabel")}
+              <select value={pref} onChange={e => setPref(e.target.value)}>
+                {Object.entries(t("prefs")).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <div className="fw-onb-row" style={{ marginTop:12 }}>
+            <button className="fw-btn ghost" onClick={reset}>{t("cancel")}</button>
+            <button className="fw-btn solid" disabled={!name.trim()} onClick={handleAdd}>
+              <Plus size={16} /> {t("customGoalAdd")}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1415,6 +1554,19 @@ function WeekReviewModal({ summary, onContinue }) {
   );
 }
 
+function CollapsiblePanel({ icon, title, children }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="fw-panel">
+      <button className="fw-collapsible-header" onClick={() => setOpen(o => !o)}>
+        <div className="fw-section-h" style={{ margin:0 }}>{icon} {title}</div>
+        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      </button>
+      {open && <div className="fw-collapsible-body">{children}</div>}
+    </section>
+  );
+}
+
 /* ------------------------------- settings -------------------------------- */
 function SettingsView({ availability, setAvailability, pomo, setPomo, dark, setDark,
   notificationsEnabled, setNotificationsEnabled, requestNotifPermission, lang, setLang,
@@ -1547,6 +1699,20 @@ function SettingsView({ availability, setAvailability, pomo, setPomo, dark, setD
       <button className="fw-btn danger wide" onClick={()=>{ if(confirm(t("resetConfirm"))) reset(); }}>
         <Trash2 size={15}/> {t("resetAll")}
       </button>
+
+      {/* Kontakt */}
+      <CollapsiblePanel icon={<Mail size={16}/>} title={t("contactTitle")}>
+        <p style={{ color:"var(--muted)", fontSize:13, margin:"0 0 12px", lineHeight:1.5 }}>{t("contactLead")}</p>
+        <a className="fw-btn solid wide" href={`mailto:${t("contactEmail")}`}>
+          <Mail size={15}/> {t("contactBtn")}
+        </a>
+      </CollapsiblePanel>
+
+      {/* Impressum */}
+      <CollapsiblePanel icon={<Info size={16}/>} title={t("impressumTitle")}>
+        <pre className="fw-impressum">{t("impressumBody")}</pre>
+      </CollapsiblePanel>
+
       <div className="fw-foot">{t("storageNote")}</div>
     </div>
   );
@@ -1891,6 +2057,28 @@ const CSS = `
 .fw-mode-btn.active{border-color:#7c5cff;color:#7c5cff;background:rgba(124,92,255,.1)}
 .fw-auth-error{font-size:12.5px;color:#ff5a5a;text-align:center;padding:2px 0}
 .fw-auth-notice{font-size:12px;color:var(--muted);text-align:center;padding:6px 10px;background:var(--card2);border-radius:10px;margin-bottom:6px}
+
+/* custom goal box */
+.fw-custom-goal{border:1.5px dashed var(--line);border-radius:16px;overflow:hidden;margin-top:6px}
+.fw-custom-goal-toggle{width:100%;display:flex;align-items:center;gap:10px;background:none;border:none;padding:12px 14px;cursor:pointer;color:var(--text);font-weight:700;font-size:14px;font-family:'Outfit'}
+.fw-custom-goal-toggle:hover{background:var(--card2)}
+.fw-custom-goal-toggle svg:last-child{margin-left:auto;color:var(--muted)}
+.fw-custom-goal-ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:#fff;flex-shrink:0}
+.fw-custom-goal-form{padding:0 14px 14px;display:flex;flex-direction:column;gap:0}
+.fw-cg-name{width:100%;border:1.5px solid var(--line);background:var(--card2);border-radius:11px;padding:10px 12px;font-size:15px;font-weight:700;font-family:'Outfit';color:var(--text);margin-bottom:8px}
+.fw-cg-name:focus{outline:none;border-color:#7c5cff}
+.fw-cg-desc{width:100%;border:1.5px solid var(--line);background:var(--card2);border-radius:11px;padding:9px 12px;font-size:13px;color:var(--text);margin-bottom:10px}
+.fw-cg-desc:focus{outline:none;border-color:#7c5cff}
+.fw-cg-icons{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}
+.fw-cg-icon{width:34px;height:34px;border-radius:10px;border:1.5px solid var(--line);background:var(--card2);display:grid;place-items:center;cursor:pointer;color:var(--text);transition:.15s}
+.fw-cg-icon:hover{border-color:#7c5cff}
+.fw-cg-icon.sel{border-color:transparent}
+.fw-cg-row{display:flex;align-items:center;gap:10px}
+
+/* collapsible panel */
+.fw-collapsible-header{width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;cursor:pointer;padding:0;color:var(--muted)}
+.fw-collapsible-body{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.fw-impressum{white-space:pre-wrap;font-family:'Inter',system-ui;font-size:12.5px;color:var(--muted);line-height:1.65;margin:0;background:var(--card2);border-radius:10px;padding:12px}
 
 /* calendar upload */
 .fw-cal-upload-row{display:flex;align-items:center;gap:6px;margin-bottom:8px}
