@@ -925,11 +925,10 @@ function Onboarding({ onDone }) {
             <div className="fw-onb-h"><Calendar size={22} /> {t("onbBlockedTitle")}</div>
             <p className="fw-onb-lead">{t("onbBlockedLead")}</p>
 
-            {/* Calendar screenshot upload */}
+            {/* Calendar screenshot — subtle helper */}
             <div className="fw-cal-upload-row">
-              <label className="fw-cal-upload-btn">
-                <ImageIcon size={15} />
-                {calImg ? "Bild wechseln" : t("onbCalUpload")}
+              <label className="fw-cal-upload-icon" title="Kalender-Screenshot als Referenz">
+                <ImageIcon size={14} />
                 <input type="file" accept="image/*" style={{ display:"none" }}
                   onChange={e => {
                     const f = e.target.files?.[0];
@@ -939,7 +938,7 @@ function Onboarding({ onDone }) {
                     r.readAsDataURL(f);
                   }} />
               </label>
-              {calImg && <button className="fw-mini no" onClick={() => setCalImg(null)}><X size={14}/></button>}
+              {calImg && <button className="fw-mini no" style={{ width:24, height:24 }} onClick={() => setCalImg(null)}><X size={12}/></button>}
             </div>
 
             {calImg && (
@@ -1792,9 +1791,9 @@ const CSS = `
 @media (prefers-reduced-motion:reduce){.fw *{animation:none!important;transition:none!important}}
 
 /* calendar upload */
-.fw-cal-upload-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-.fw-cal-upload-btn{display:inline-flex;align-items:center;gap:7px;border:1.5px dashed var(--line);border-radius:12px;padding:9px 14px;font-size:13px;font-weight:600;color:#7c5cff;cursor:pointer;transition:.15s;background:rgba(124,92,255,.06)}
-.fw-cal-upload-btn:hover{border-color:#7c5cff;background:rgba(124,92,255,.12)}
+.fw-cal-upload-row{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.fw-cal-upload-icon{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;border:1.5px solid var(--line);color:var(--muted);cursor:pointer;transition:.15s}
+.fw-cal-upload-icon:hover{border-color:#7c5cff;color:#7c5cff}
 .fw-cal-preview{border-radius:14px;overflow:hidden;margin-bottom:12px;max-height:200px;border:1.5px solid var(--line)}
 .fw-cal-preview img{width:100%;object-fit:cover;display:block}
 .fw-busy-list{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
