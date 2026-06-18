@@ -2,6 +2,7 @@ import { initializeApp, getApps } from "firebase/app";
 import {
   getAuth, GoogleAuthProvider, OAuthProvider,
   signInWithPopup, signOut, onAuthStateChanged,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword,
 } from "firebase/auth";
 import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
 
@@ -32,6 +33,12 @@ export const signInApple = () => {
 };
 
 export const signOutUser = () => signOut(_auth);
+
+export const signInEmail = (email, password) =>
+  signInWithEmailAndPassword(_auth, email, password);
+
+export const signUpEmail = (email, password) =>
+  createUserWithEmailAndPassword(_auth, email, password);
 
 export const onAuth = (cb) => {
   if (!fbReady) { setTimeout(() => cb(null), 0); return () => {}; }

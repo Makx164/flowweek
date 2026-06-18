@@ -8,7 +8,7 @@ import {
   Bell, BellOff, BarChart2, Globe, User, LogOut,
   ChevronLeft, ChevronRight, ImageIcon,
 } from "lucide-react";
-import { fbReady, onAuth, signInGoogle, signInApple, signOutUser, loadCloud, saveCloud } from "./firebase.js";
+import { fbReady, onAuth, signInGoogle, signInApple, signInEmail, signUpEmail, signOutUser, loadCloud, saveCloud } from "./firebase.js";
 
 /* ----------------------------- design tokens ----------------------------- */
 const ACCENTS = {
@@ -703,8 +703,6 @@ export default function App() {
     <div style={{ minHeight:"100vh", display:"grid", placeItems:"center", color:"#888" }}>Lädt…</div>
   );
 
-  const showLogin = fbReady && user === null && !skippedAuth;
-
   return (
     <LangCtx.Provider value={t}>
       <div className={dark ? "fw fw-dark" : "fw"}>
@@ -712,10 +710,9 @@ export default function App() {
         <Confetti on={celebrate} />
         {toast && <div className="fw-toast">{toast}</div>}
 
-        {showLogin ? (
-          <LoginView onSkip={handleSkipAuth} />
-        ) : !onboarded ? (
+        {!onboarded ? (
           <Onboarding
+            fbReady={fbReady}
             onDone={(picked, avail) => {
               setGoals(picked); setAvailability(avail);
               const created = planWeek(picked, [], avail);
@@ -809,7 +806,7 @@ function AppNav({ view, setView }) {
 const FEAT_ICONS = [Calendar, Clock, Trophy, BarChart2];
 const FEAT_COLORS = ["violet", "blue", "amber", "green"];
 
-function Onboarding({ onDone }) {
+function Onboarding({ onDone, fbReady }) {
   const t = useT();
   const [step, setStep] = useState(0);
   const [picked, setPicked] = useState(() =>
@@ -822,6 +819,41 @@ function Onboarding({ onDone }) {
   const [busyForm, setBusyForm] = useState({ day:0, start:"9", end:"17", label:"", recurring:true });
   const [calImg, setCalImg] = useState(null);
 
+  // auth on splash
+  const [authLoading, setAuthLoading] = useState(null);
+  const [authError, setAuthError] = useState("");
+  const [emailExpanded, setEmailExpanded] = useState(false);
+  const [emailMode, setEmailMode] = useState("signin"); // "signin" | "signup"
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const handleGoogle = async () => {
+    setAuthLoading("google"); setAuthError("");
+    try { await signInGoogle(); }
+    catch (e) { if (e.code !== "auth/popup-closed-by-user") setAuthError("Google-Anmeldung fehlgeschlagen."); setAuthLoading(null); }
+  };
+  const handleApple = async () => {
+    setAuthLoading("apple"); setAuthError("");
+    try { await signInApple(); }
+    catch { setAuthError("Apple-Anmeldung fehlgeschlagen."); setAuthLoading(null); }
+  };
+  const handleEmail = async (e) => {
+    e.preventDefault(); setAuthLoading("email"); setAuthError("");
+    try {
+      if (emailMode === "signin") await signInEmail(email, password);
+      else await signUpEmail(email, password);
+    } catch (err) {
+      const msg = err.code === "auth/wrong-password" || err.code === "auth/invalid-credential"
+        ? "Falsches Passwort." : err.code === "auth/user-not-found"
+        ? "Kein Konto gefunden. Neu registrieren?"
+        : err.code === "auth/email-already-in-use"
+        ? "E-Mail bereits vergeben."
+        : "Fehler: " + (err.message || err.code);
+      setAuthError(msg);
+      setAuthLoading(null);
+    }
+  };
+
   const toggle = (tmpl) => {
     const exists = picked.find(p => p.name === tmpl.name);
     if (exists) setPicked(picked.filter(p => p.name !== tmpl.name));
@@ -833,7 +865,7 @@ function Onboarding({ onDone }) {
       <div className="fw-onb-card">
         <div className="fw-onb-glow" />
 
-        {/* Step 0 — Splash */}
+        {/* Step 0 — Splash + auth */}
         {step === 0 && (
           <>
             <div className="fw-splash-icon-wrap">
@@ -859,9 +891,56 @@ function Onboarding({ onDone }) {
                 );
               })}
             </div>
-            <button className="fw-btn solid wide" onClick={() => setStep(1)}>
+
+            {/* Primary CTA */}
+            <button className="fw-btn solid wide" style={{ marginTop:4 }} onClick={() => setStep(1)}>
               {t("onbStartFree")} <ArrowRight size={18} />
             </button>
+
+            {/* Auth section — only when Firebase is configured */}
+            {fbReady && (
+              <>
+                <div className="fw-splash-or"><span>oder anmelden</span></div>
+
+                {/* Email form */}
+                {emailExpanded ? (
+                  <form className="fw-email-form" onSubmit={handleEmail}>
+                    <input type="email" placeholder="E-Mail" value={email} required
+                      onChange={e => setEmail(e.target.value)} />
+                    <input type="password" placeholder="Passwort" value={password} required minLength={6}
+                      onChange={e => setPassword(e.target.value)} />
+                    <div className="fw-email-mode">
+                      <button type="button" className={emailMode==="signin"?"fw-mode-btn active":"fw-mode-btn"}
+                        onClick={() => setEmailMode("signin")}>Anmelden</button>
+                      <button type="button" className={emailMode==="signup"?"fw-mode-btn active":"fw-mode-btn"}
+                        onClick={() => setEmailMode("signup")}>Registrieren</button>
+                    </div>
+                    {authError && <div className="fw-auth-error">{authError}</div>}
+                    <button type="submit" className="fw-btn solid wide" disabled={authLoading==="email"}>
+                      {authLoading==="email" ? "…" : emailMode==="signin" ? "Anmelden" : "Konto erstellen"}
+                    </button>
+                    <button type="button" className="fw-btn ghost wide" style={{ marginTop:6 }}
+                      onClick={() => { setEmailExpanded(false); setAuthError(""); }}>Zurück</button>
+                  </form>
+                ) : (
+                  <button className="fw-splash-email-btn" onClick={() => setEmailExpanded(true)}>
+                    Mit E-Mail anmelden
+                  </button>
+                )}
+
+                {/* Google + Apple */}
+                <div className="fw-splash-socials">
+                  <button className="fw-social-btn" onClick={handleGoogle} disabled={!!authLoading}>
+                    <GoogleSvg /> {authLoading==="google" ? "…" : "Google"}
+                  </button>
+                  <button className="fw-social-btn apple" onClick={handleApple} disabled={!!authLoading}>
+                    <AppleSvg /> {authLoading==="apple" ? "…" : "Apple"}
+                  </button>
+                </div>
+                {authError && !emailExpanded && <div className="fw-auth-error">{authError}</div>}
+              </>
+            )}
+
             <p className="fw-splash-hint">{t("onbHint")}</p>
           </>
         )}
@@ -1789,6 +1868,24 @@ const CSS = `
 @keyframes fwpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}
 @keyframes fwtoast{from{opacity:0;transform:translate(-50%,-10px)}to{opacity:1;transform:translate(-50%,0)}}
 @media (prefers-reduced-motion:reduce){.fw *{animation:none!important;transition:none!important}}
+
+/* splash auth */
+.fw-splash-or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:14px 0 10px}
+.fw-splash-or::before,.fw-splash-or::after{content:'';flex:1;height:1px;background:var(--line)}
+.fw-splash-email-btn{width:100%;border:1.5px solid var(--line);background:none;border-radius:13px;padding:11px;font-size:14px;font-weight:600;color:var(--text);cursor:pointer;transition:.15s;margin-bottom:8px}
+.fw-splash-email-btn:hover{border-color:#7c5cff;color:#7c5cff}
+.fw-splash-socials{display:flex;gap:9px;margin-top:4px}
+.fw-social-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px solid var(--line);background:var(--card2);border-radius:13px;padding:11px;font-size:13.5px;font-weight:700;cursor:pointer;color:var(--text);transition:.15s}
+.fw-social-btn:hover{border-color:#7c5cff;transform:translateY(-1px)}
+.fw-social-btn.apple{background:#1d1b2e;color:#fff;border-color:transparent}
+.fw-dark .fw-social-btn.apple{background:#f2f0fb;color:#1d1b2e}
+.fw-email-form{display:flex;flex-direction:column;gap:8px;width:100%;margin-bottom:4px}
+.fw-email-form input{border:1.5px solid var(--line);background:var(--card2);border-radius:12px;padding:11px 13px;font-size:14px;color:var(--text);width:100%}
+.fw-email-form input:focus{outline:none;border-color:#7c5cff}
+.fw-email-mode{display:flex;gap:6px}
+.fw-mode-btn{flex:1;border:1.5px solid var(--line);background:none;border-radius:10px;padding:8px;font-size:13px;font-weight:700;cursor:pointer;color:var(--muted);transition:.15s}
+.fw-mode-btn.active{border-color:#7c5cff;color:#7c5cff;background:rgba(124,92,255,.1)}
+.fw-auth-error{font-size:12.5px;color:#ff5a5a;text-align:center;padding:2px 0}
 
 /* calendar upload */
 .fw-cal-upload-row{display:flex;align-items:center;gap:6px;margin-bottom:8px}
