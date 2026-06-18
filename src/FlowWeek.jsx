@@ -6,6 +6,7 @@ import {
   Settings as Cog, Target, Sparkles, Sun, Moon, Dumbbell, BookOpen,
   Brain, Droplet, Clock, Pause, Award, Download, ArrowRight,
   Bell, BellOff, BarChart2, Globe, User, LogOut,
+  ChevronLeft, ChevronRight, ImageIcon,
 } from "lucide-react";
 import { fbReady, onAuth, signInGoogle, signInApple, signOutUser, loadCloud, saveCloud } from "./firebase.js";
 
@@ -122,9 +123,15 @@ const T = {
     onbGoalsLead: "Wähle aus, was dir wichtig ist. Du kannst alles jederzeit anpassen.",
     onbMore: "Weiter",
     onbWhenTitle: "Wann bist du wach?",
-    onbWhenLead: "FlowWeek plant Einheiten nur in diesem Zeitfenster. Feste Termine trägst du später unter Einstellungen ein.",
+    onbWhenLead: "FlowWeek plant Einheiten nur in diesem Zeitfenster. Feste Termine trägst du im nächsten Schritt eintragen.",
+    onbBlockedTitle: "Feste Termine",
+    onbBlockedLead: "Trag ein, wann du nicht verfügbar bist — Arbeit, Schule, Arzt etc. FlowWeek plant drumherum.",
+    onbCalUpload: "Kalender-Screenshot hochladen",
+    onbCalUploadHint: "Lade einen Screenshot deines Kalenders hoch, um Termine leichter abzulesen.",
     onbGo: "Loslegen",
     onbBack: "Zurück",
+    shiftBack: "−30 min",
+    shiftFwd: "+30 min",
     // auth
     authTitle: "Anmelden",
     authLead: "Melde dich an, um Verlauf, XP und Level-System auf allen Geräten zu synchronisieren.",
@@ -208,9 +215,15 @@ const T = {
     onbGoalsLead: "Pick what matters to you. You can adjust everything later.",
     onbMore: "Continue",
     onbWhenTitle: "When are you awake?",
-    onbWhenLead: "FlowWeek only schedules sessions within this window. Add fixed appointments later in Settings.",
+    onbWhenLead: "FlowWeek only schedules sessions within this window. Add fixed appointments in the next step.",
+    onbBlockedTitle: "Fixed appointments",
+    onbBlockedLead: "Add times when you're unavailable — work, school, doctor etc. FlowWeek plans around them.",
+    onbCalUpload: "Upload calendar screenshot",
+    onbCalUploadHint: "Upload a screenshot of your calendar to easily read off your appointments.",
     onbGo: "Let's go",
     onbBack: "Back",
+    shiftBack: "−30 min",
+    shiftFwd: "+30 min",
     authTitle: "Sign in",
     authLead: "Sign in to sync your history, XP and levels across all your devices.",
     authGoogle: "Sign in with Google",
@@ -330,6 +343,15 @@ function findReplacement(goal, sessions, availability, fromDay) {
     if (st != null) return { id: uid(), goalId: goal.id, day: d, start: st, durationMin: goal.durationMin, status: "suggested" };
   }
   return null;
+}
+
+function shiftSession(sess, deltaMin, sessions, availability) {
+  const newStart = sess.start + deltaMin;
+  const wake = [availability.wakeStart, availability.wakeEnd];
+  if (newStart < wake[0] || newStart + sess.durationMin > wake[1]) return null;
+  const occ = buildOccupied(sessions.filter(s => s.id !== sess.id), availability.busy, sess.day);
+  if (!slotFree(occ, newStart, newStart + sess.durationMin)) return null;
+  return { ...sess, start: newStart };
 }
 
 /* ------------------------------ ics / google ----------------------------- */
@@ -646,6 +668,11 @@ export default function App() {
   const acceptSuggestion  = (id) => setSessions(prev => prev.map(s => s.id === id ? { ...s, status:"planned" } : s));
   const acceptAll         = () => setSessions(prev => prev.map(s => s.status === "suggested" ? { ...s, status:"planned" } : s));
   const removeSession     = (id) => setSessions(prev => prev.filter(s => s.id !== id));
+  const shiftSess = (sess, delta) => {
+    const shifted = shiftSession(sess, delta, sessions, availability);
+    if (shifted) setSessions(prev => prev.map(s => s.id === sess.id ? shifted : s));
+    else flash(delta < 0 ? "Kein freier Slot früher." : "Kein freier Slot später.");
+  };
   const rescheduleSession = (sess) => {
     const g = goalById(sess.goalId);
     const others = sessions.filter(s => s.id !== sess.id);
@@ -701,7 +728,7 @@ export default function App() {
             <AppHeader level={level} xp={stats.xp} dark={dark} setDark={setDark} />
             <main className="fw-main">
               {view === "today"    && <TodayView {...{ goals, sessions, stats, level, setActive, completeSession, skipSession, goalById }} />}
-              {view === "week"     && <WeekView  {...{ goals, sessions, runPlan, acceptSuggestion, acceptAll, skipSession, rescheduleSession, removeSession, completeSession, setActive, goalById, downloadIcs, googleLink }} />}
+              {view === "week"     && <WeekView  {...{ goals, sessions, runPlan, acceptSuggestion, acceptAll, skipSession, rescheduleSession, removeSession, completeSession, setActive, goalById, downloadIcs, googleLink, shiftSess }} />}
               {view === "goals"    && <GoalsView {...{ goals, setGoals, stats, weekHistory }} />}
               {view === "settings" && <SettingsView {...{ availability, setAvailability, pomo, setPomo, dark, setDark, notificationsEnabled, setNotificationsEnabled, requestNotifPermission, lang, setLang, user, skippedAuth, handleSkipAuth, reset: () => { setOnboarded(false); setGoals([]); setSessions([]); setWeekHistory([]); setStats({ xp:0,done:0,streaks:{},morningDone:false,currentWeekKey:getMondayKey() }); cloudSyncedRef.current=false; }}} />}
             </main>
@@ -791,6 +818,9 @@ function Onboarding({ onDone }) {
     }))
   );
   const [wake, setWake] = useState({ start:7, end:23 });
+  const [busyList, setBusyList] = useState([]);
+  const [busyForm, setBusyForm] = useState({ day:0, start:"9", end:"17", label:"", recurring:true });
+  const [calImg, setCalImg] = useState(null);
 
   const toggle = (tmpl) => {
     const exists = picked.find(p => p.name === tmpl.name);
@@ -882,8 +912,86 @@ function Onboarding({ onDone }) {
             </div>
             <div className="fw-onb-row">
               <button className="fw-btn ghost" onClick={() => setStep(1)}>{t("onbBack")}</button>
+              <button className="fw-btn solid" onClick={() => setStep(3)}>
+                {t("onbMore")} <ArrowRight size={18} />
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Step 3 — Blocked times + calendar screenshot */}
+        {step === 3 && (
+          <>
+            <div className="fw-onb-h"><Calendar size={22} /> {t("onbBlockedTitle")}</div>
+            <p className="fw-onb-lead">{t("onbBlockedLead")}</p>
+
+            {/* Calendar screenshot upload */}
+            <div className="fw-cal-upload-row">
+              <label className="fw-cal-upload-btn">
+                <ImageIcon size={15} />
+                {calImg ? "Bild wechseln" : t("onbCalUpload")}
+                <input type="file" accept="image/*" style={{ display:"none" }}
+                  onChange={e => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    const r = new FileReader();
+                    r.onload = ev => setCalImg(ev.target.result);
+                    r.readAsDataURL(f);
+                  }} />
+              </label>
+              {calImg && <button className="fw-mini no" onClick={() => setCalImg(null)}><X size={14}/></button>}
+            </div>
+
+            {calImg && (
+              <div className="fw-cal-preview">
+                <img src={calImg} alt="Kalender" />
+              </div>
+            )}
+
+            {/* Blocked time list */}
+            {busyList.length > 0 && (
+              <div className="fw-busy-list">
+                {busyList.map((b, i) => (
+                  <div key={i} className="fw-busy-row">
+                    <span>{b.recurring && <RotateCw size={11} style={{ marginRight:4, color:"#7c5cff" }}/>}
+                      {t("daysFull")[b.day]} · {minToLabel(b.start)}–{minToLabel(b.end)}
+                      {b.label ? ` · ${b.label}` : ""}
+                    </span>
+                    <button className="fw-mini no" onClick={() => setBusyList(busyList.filter((_,x)=>x!==i))}><Trash2 size={13}/></button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add form */}
+            <div className="fw-busy-add">
+              <select value={busyForm.day} onChange={e => setBusyForm({...busyForm, day:+e.target.value})}>
+                {t("daysFull").map((d,i) => <option key={i} value={i}>{d}</option>)}
+              </select>
+              <input type="number" min="0" max="23" value={busyForm.start}
+                onChange={e => setBusyForm({...busyForm, start:e.target.value})} />
+              <span style={{ color:"var(--muted)", fontSize:12 }}>–</span>
+              <input type="number" min="1" max="24" value={busyForm.end}
+                onChange={e => setBusyForm({...busyForm, end:e.target.value})} />
+              <input placeholder="Label (optional)" value={busyForm.label}
+                onChange={e => setBusyForm({...busyForm, label:e.target.value})} style={{ flex:1, minWidth:80 }} />
+              <button className="fw-mini ok" onClick={() => {
+                if (+busyForm.end <= +busyForm.start) return;
+                setBusyList([...busyList, { day:busyForm.day, start:+busyForm.start*60, end:+busyForm.end*60, label:busyForm.label||"Termin", recurring:busyForm.recurring }]);
+                setBusyForm({...busyForm, label:""});
+              }}><Plus size={15}/></button>
+            </div>
+            <div className="fw-busy-recurring">
+              <label className="fw-recurring-label">
+                <input type="checkbox" checked={busyForm.recurring} onChange={e => setBusyForm({...busyForm, recurring:e.target.checked})} />
+                <RotateCw size={13}/> {t("recurringLabel")}
+              </label>
+            </div>
+
+            <div className="fw-onb-row">
+              <button className="fw-btn ghost" onClick={() => setStep(2)}>{t("onbBack")}</button>
               <button className="fw-btn solid" onClick={() =>
-                onDone(picked, { wakeStart:wake.start*60, wakeEnd:wake.end*60, busy:[] })}>
+                onDone(picked, { wakeStart:wake.start*60, wakeEnd:wake.end*60, busy:busyList })}>
                 {t("onbGo")} <Sparkles size={18} />
               </button>
             </div>
@@ -988,7 +1096,7 @@ function SessionRow({ sess, goal, onStart, onDone, onSkip, compact }) {
 
 /* --------------------------------- week ---------------------------------- */
 function WeekView({ goals, sessions, runPlan, acceptAll, acceptSuggestion, skipSession,
-  rescheduleSession, removeSession, completeSession, setActive, goalById }) {
+  rescheduleSession, removeSession, completeSession, setActive, goalById, shiftSess }) {
   const t = useT();
   const hasSuggestions = sessions.some(s => s.status === "suggested");
   const planned = sessions.filter(s => s.status === "planned" || s.status === "done");
@@ -1032,7 +1140,8 @@ function WeekView({ goals, sessions, runPlan, acceptAll, acceptSuggestion, skipS
                     <div className="fw-wc-actions">
                       {suggested ? (
                         <>
-                          <a className="fw-mini g" href={googleLink(s,goal.name)} target="_blank" rel="noreferrer"><Calendar size={15}/></a>
+                          <button className="fw-mini" title="-30 min" onClick={() => shiftSess(s, -30)}><ChevronLeft size={15}/></button>
+                          <button className="fw-mini" title="+30 min" onClick={() => shiftSess(s, 30)}><ChevronRight size={15}/></button>
                           <button className="fw-mini" onClick={() => rescheduleSession(s)}><RotateCw size={15}/></button>
                           <button className="fw-mini ok" onClick={() => acceptSuggestion(s.id)}><Check size={15}/></button>
                           <button className="fw-mini no" onClick={() => removeSession(s.id)}><X size={15}/></button>
@@ -1681,4 +1790,12 @@ const CSS = `
 @keyframes fwpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}
 @keyframes fwtoast{from{opacity:0;transform:translate(-50%,-10px)}to{opacity:1;transform:translate(-50%,0)}}
 @media (prefers-reduced-motion:reduce){.fw *{animation:none!important;transition:none!important}}
+
+/* calendar upload */
+.fw-cal-upload-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.fw-cal-upload-btn{display:inline-flex;align-items:center;gap:7px;border:1.5px dashed var(--line);border-radius:12px;padding:9px 14px;font-size:13px;font-weight:600;color:#7c5cff;cursor:pointer;transition:.15s;background:rgba(124,92,255,.06)}
+.fw-cal-upload-btn:hover{border-color:#7c5cff;background:rgba(124,92,255,.12)}
+.fw-cal-preview{border-radius:14px;overflow:hidden;margin-bottom:12px;max-height:200px;border:1.5px solid var(--line)}
+.fw-cal-preview img{width:100%;object-fit:cover;display:block}
+.fw-busy-list{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
 `;
