@@ -1036,6 +1036,22 @@ function Onboarding({ onDone, fbReady }) {
               })}
             </div>
 
+            {/* Custom goals already added — shown as removable cards */}
+            {picked.filter(p => !TEMPLATES.some(t => t.name === p.name)).map(p => {
+              const [c1, c2] = ACCENTS[p.color];
+              const I = p.iconId ? iconById(p.iconId) : Sparkles;
+              return (
+                <div key={p.id} className="fw-custom-goal-pill" style={{ background:`linear-gradient(135deg,${c1},${c2})` }}>
+                  <I size={16} style={{ flexShrink:0 }} />
+                  <span>{p.name}</span>
+                  <small>{p.perWeek}×/Woche · {p.durationMin} min</small>
+                  <button className="fw-mini-x" onClick={() => setPicked(prev => prev.filter(x => x.id !== p.id))} aria-label="Entfernen">
+                    <X size={13} />
+                  </button>
+                </div>
+              );
+            })}
+
             {/* Custom goal box */}
             <CustomGoalBox onAdd={(g) => setPicked(prev => [...prev, g])} />
 
@@ -2255,6 +2271,12 @@ const CSS = `
 .fw-mode-btn.active{border-color:#7c5cff;color:#7c5cff;background:rgba(124,92,255,.1)}
 .fw-auth-error{font-size:12.5px;color:#ff5a5a;text-align:center;padding:2px 0}
 .fw-auth-notice{font-size:12px;color:var(--muted);text-align:center;padding:6px 10px;background:var(--card2);border-radius:10px;margin-bottom:6px}
+
+/* custom goal pill (added goals in onboarding) */
+.fw-custom-goal-pill{display:flex;align-items:center;gap:9px;border-radius:14px;padding:11px 13px;color:#fff;margin-top:8px;font-weight:700;font-size:14px;font-family:'Outfit'}
+.fw-custom-goal-pill small{font-size:11px;opacity:.8;font-weight:500;margin-left:auto;white-space:nowrap}
+.fw-mini-x{border:none;background:rgba(255,255,255,.25);width:26px;height:26px;border-radius:8px;display:grid;place-items:center;cursor:pointer;color:#fff;flex-shrink:0;margin-left:4px}
+.fw-mini-x:hover{background:rgba(255,255,255,.4)}
 
 /* custom goal box */
 .fw-custom-goal{border:1.5px dashed var(--line);border-radius:16px;overflow:hidden;margin-top:6px}
