@@ -1322,7 +1322,7 @@ function NextCard({ sess, goal, onStart, onDone }) {
       <div className="fw-next-title"><I size={24} /> {goal.name}</div>
       <div className="fw-next-meta">{sess.durationMin} min · {TYPES[goal.type].label}</div>
       <div className="fw-next-btns">
-        <button className="fw-btn white" onClick={onStart}><Play size={18} /> {t("start")}</button>
+        {sess.hasTimer !== false && <button className="fw-btn white" onClick={onStart}><Play size={18} /> {t("start")}</button>}
         <button className="fw-btn glass" onClick={onDone}><Check size={18} /> {t("done")}</button>
       </div>
     </div>
@@ -1346,7 +1346,7 @@ function SessionRow({ sess, goal, onStart, onDone, onSkip, compact }) {
         <div className="fw-row-check"><Check size={18} /></div>
       ) : (
         <div className="fw-row-actions">
-          {!compact && <button className="fw-mini" onClick={onStart} aria-label={t("start")}><Play size={16} /></button>}
+          {!compact && sess.hasTimer !== false && <button className="fw-mini" onClick={onStart} aria-label={t("start")}><Play size={16} /></button>}
           <button className="fw-mini ok" onClick={onDone} aria-label={t("done")}><Check size={16} /></button>
           {onSkip && <button className="fw-mini no" onClick={onSkip} aria-label={t("skip")}><X size={16} /></button>}
         </div>
@@ -1452,7 +1452,7 @@ function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSug
                       ) : (
                         <>
                           <button className="fw-mini" onClick={() => setModal({ mode:"edit", sess:s })}><Pencil size={14}/></button>
-                          <button className="fw-mini" onClick={() => setActive(s)}><Play size={15}/></button>
+                          {s.hasTimer !== false && <button className="fw-mini" onClick={() => setActive(s)}><Play size={15}/></button>}
                           <button className="fw-mini ok" onClick={() => completeSession(s)}><Check size={15}/></button>
                           <button className="fw-mini no" onClick={() => skipSession(s)}><X size={15}/></button>
                         </>
@@ -1496,20 +1496,21 @@ function SessionModal({ modal, goals, sessions, availability, onAdd, onEdit, onC
   const [customName,  setCustomName]  = useState(isEdit ? (sess.customName ?? "") : "");
   const [customColor, setCustomColor] = useState(isEdit ? (sess.customColor ?? "violet") : "violet");
   const [customIcon,  setCustomIcon]  = useState(isEdit ? (sess.customIconId ?? "star") : "star");
+  const [hasTimer,    setHasTimer]    = useState(isEdit ? (sess.hasTimer ?? true) : true);
 
   const useCustom = goalId === "";
 
   const handleSave = () => {
     const start = startH * 60 + startM;
     if (isEdit) {
-      const patch = { day, start, durationMin };
+      const patch = { day, start, durationMin, hasTimer };
       if (!sess.goalId) { patch.customName = customName; patch.customColor = customColor; patch.customIconId = customIcon; }
       onEdit(sess.id, patch);
     } else {
       if (useCustom) {
-        onAdd({ goalId: null, customName: customName || "Einheit", customColor, customIconId: customIcon, day, start, durationMin });
+        onAdd({ goalId: null, customName: customName || "Einheit", customColor, customIconId: customIcon, day, start, durationMin, hasTimer });
       } else {
-        onAdd({ goalId, day, start, durationMin });
+        onAdd({ goalId, day, start, durationMin, hasTimer });
       }
     }
     onClose();
@@ -1595,7 +1596,18 @@ function SessionModal({ modal, goals, sessions, availability, onAdd, onEdit, onC
           </div>
         </div>
 
-        <button className="fw-btn solid wide" style={{ marginTop:8 }} onClick={handleSave}>
+        {/* Timer toggle */}
+        <div className="fw-sm-toggle">
+          <div>
+            <div style={{ fontWeight:700, fontSize:14 }}>Mit Timer</div>
+            <div style={{ color:"var(--muted)", fontSize:12 }}>Startet Pomodoro oder Countdown beim Abspielen</div>
+          </div>
+          <button className={hasTimer ? "fw-switch on" : "fw-switch"} type="button" onClick={() => setHasTimer(v => !v)}>
+            <i/>
+          </button>
+        </div>
+
+        <button className="fw-btn solid wide" style={{ marginTop:12 }} onClick={handleSave}>
           <Check size={16}/> {isEdit ? "Speichern" : "Hinzufügen"}
         </button>
       </div>
@@ -2314,6 +2326,7 @@ const CSS = `
 .fw-sm-group select,.fw-sm-group input{border:1.5px solid var(--line);background:var(--card2);border-radius:11px;padding:9px 11px;font-size:14px;color:var(--text);width:100%}
 .fw-sm-group select:focus,.fw-sm-group input:focus{outline:none;border-color:#7c5cff}
 .fw-sm-row{display:flex;gap:12px}
+.fw-sm-toggle{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line);margin-top:4px}
 
 /* collapsible panel */
 .fw-collapsible-header{width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;cursor:pointer;padding:0;color:var(--muted)}
