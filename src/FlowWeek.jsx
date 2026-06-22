@@ -9,7 +9,9 @@ import {
   ChevronLeft, ChevronRight, ImageIcon,
   Star, Heart, Music, Coffee, Zap, Bike, Pencil, Leaf, Smile,
   Wind, Mail, Info, ChevronDown, ChevronUp,
+  FileText, QrCode, NotebookPen,
 } from "lucide-react";
+import QRCode from "qrcode";
 import { fbReady, onAuth, signInGoogle, signInApple, signInEmail, signUpEmail, signOutUser, loadCloud, saveCloud } from "./firebase.js";
 
 /* ----------------------------- design tokens ----------------------------- */
@@ -30,13 +32,11 @@ const TYPES = {
 };
 
 const TEMPLATES = [
-  { name: "Workout",        type: "sport", color: "coral",  perWeek: 3, durationMin: 45, pref: "evening",   icon: Dumbbell },
-  { name: "Laufen",         type: "sport", color: "blue",   perWeek: 3, durationMin: 30, pref: "morning",   icon: Dumbbell },
-  { name: "Lesen",          type: "focus", color: "violet", perWeek: 5, durationMin: 25, pref: "evening",   icon: BookOpen },
-  { name: "Lernen",         type: "focus", color: "blue",   perWeek: 4, durationMin: 50, pref: "afternoon", icon: Brain },
-  { name: "Meditation",     type: "habit", color: "green",  perWeek: 7, durationMin: 10, pref: "morning",   icon: Brain },
-  { name: "Wasser trinken", type: "habit", color: "blue",   perWeek: 7, durationMin: 5,  pref: "any",       icon: Droplet },
-  { name: "Früh aufstehen", type: "habit", color: "amber",  perWeek: 7, durationMin: 5,  pref: "morning",   icon: Sun },
+  { name: "Workout",    type: "sport", color: "coral",  perWeek: 3, durationMin: 45, pref: "evening",   icon: Dumbbell },
+  { name: "Laufen",    type: "sport", color: "blue",   perWeek: 3, durationMin: 30, pref: "morning",   icon: Dumbbell },
+  { name: "Lesen",     type: "focus", color: "violet", perWeek: 5, durationMin: 25, pref: "evening",   icon: BookOpen },
+  { name: "Lernen",    type: "focus", color: "blue",   perWeek: 4, durationMin: 50, pref: "afternoon", icon: Brain },
+  { name: "Meditation",type: "habit", color: "green",  perWeek: 7, durationMin: 10, pref: "morning",   icon: Brain },
 ];
 
 const CUSTOM_ICONS = [
@@ -67,7 +67,7 @@ const T = {
     prefs:    { morning:"Morgens", afternoon:"Mittags", evening:"Abends", any:"Egal" },
     types:    { sport:"Sport", focus:"Fokus", habit:"Gewohnheit" },
     // nav
-    navToday:"Heute", navWeek:"Woche", navGoals:"Ziele", navMore:"Mehr",
+    navToday:"Heute", navWeek:"Woche", navGoals:"Ziele", navNotes:"Notizen", navMore:"Mehr",
     // header
     levelLabel: (l) => `Level ${l}`,
     // today
@@ -179,7 +179,7 @@ const T = {
     daysFull: ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
     prefs:    { morning:"Morning", afternoon:"Afternoon", evening:"Evening", any:"Anytime" },
     types:    { sport:"Sport", focus:"Focus", habit:"Habit" },
-    navToday:"Today", navWeek:"Week", navGoals:"Goals", navMore:"More",
+    navToday:"Today", navWeek:"Week", navGoals:"Goals", navNotes:"Notes", navMore:"More",
     levelLabel: (l) => `Level ${l}`,
     allDone: "All done for today 🎉",
     nothingToday: "Nothing scheduled today",
@@ -309,7 +309,9 @@ const getMondayKey = () => {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 };
 function formatWeekKey(key) {
-  const d = new Date(key + "T00:00:00");
+  if (!key) return "–";
+  const d = new Date(key.includes("-W") ? key.replace(/-W\d+/, "-01-01") : key + "T00:00:00");
+  if (isNaN(d)) return key;
   return `${d.getDate()}. ${d.toLocaleDateString("de-DE", { month: "short" })}`;
 }
 const rateColor = (r) =>
@@ -368,7 +370,7 @@ function planWeek(goals, sessions, availability) {
         }
       }
       if (chosen == null) break;
-      const s = { id: uid(), goalId: g.id, day: chosen, start, durationMin: g.durationMin, status: "suggested" };
+      const s = { id: uid(), goalId: g.id, day: chosen, start, durationMin: g.durationMin, status: "suggested", hasTimer: g.hasTimer ?? true };
       placed.push(s); created.push(s); usedDays.add(chosen); need--;
     }
   }
@@ -534,6 +536,13 @@ function LoginView({ onSkip }) {
   );
 }
 
+function migrateAvailability(av) {
+  if (!av) return { wakeStart:420, wakeEnd:1380, busy:[] };
+  if (av.wakeStart !== undefined) return av;
+  // old format: { wake:7, sleep:23, busy:[] }
+  return { wakeStart:(av.wake??7)*60, wakeEnd:(av.sleep??23)*60, busy:av.busy??[] };
+}
+
 /* ================================ APP ==================================== */
 export default function App() {
   const [loaded, setLoaded]                     = useState(false);
@@ -552,6 +561,7 @@ export default function App() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const firedNotifsRef                          = useRef(new Set());
   const [active, setActive]                     = useState(null);
+  const [statsOpen, setStatsOpen]               = useState(false);
   const [celebrate, setCelebrate]               = useState(false);
   const [toast, setToast]                       = useState(null);
   const [replan, setReplan]                     = useState(null);
@@ -576,7 +586,7 @@ export default function App() {
         const isNewWeek = s.stats?.currentWeekKey && s.stats.currentWeekKey !== currentKey;
         setOnboarded(s.onboarded ?? false);
         setGoals(s.goals ?? []);
-        setAvailability(s.availability ?? { wakeStart:420, wakeEnd:1380, busy:[] });
+        setAvailability(migrateAvailability(s.availability));
         setPomo(s.pomo ?? { work:25, brk:5 });
         setDark(s.dark ?? false);
         setNotificationsEnabled(s.notificationsEnabled ?? false);
@@ -588,7 +598,8 @@ export default function App() {
           const rate = planned > 0 ? done / planned : 0;
           const bonus = rate >= 0.8 ? 50 : rate >= 0.5 ? 25 : 10;
           const summary = { weekKey: s.stats.currentWeekKey, planned, done, rate, bonus };
-          setWeekHistory([summary, ...(s.weekHistory ?? [])].slice(0, 12));
+          const prevHistory = (s.weekHistory ?? []).filter(h => h.weekKey !== summary.weekKey);
+          setWeekHistory([summary, ...prevHistory].slice(0, 12));
           setPendingReview(summary);
           setShowReview(true);
           setSessions([]);
@@ -621,7 +632,7 @@ export default function App() {
         setOnboarded(cloud.onboarded);
         setGoals(cloud.goals ?? []);
         setSessions(cloud.sessions ?? []);
-        setAvailability(cloud.availability ?? { wakeStart:420, wakeEnd:1380, busy:[] });
+        setAvailability(migrateAvailability(cloud.availability));
         setStats({ ...(cloud.stats ?? {}), currentWeekKey: currentKey });
         setPomo(cloud.pomo ?? { work:25, brk:5 });
         setDark(cloud.dark ?? false);
@@ -739,6 +750,9 @@ export default function App() {
     setSessions(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
     flash("Gespeichert ✓");
   };
+  const addNote = (id, note, mood) => {
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, note, mood } : s));
+  };
   const rescheduleSession = (sess) => {
     const g = goalById(sess.goalId);
     const others = sessions.filter(s => s.id !== sess.id);
@@ -747,10 +761,16 @@ export default function App() {
     else flash("Kein anderer Slot frei.");
   };
 
-  const runPlan = () => {
-    const created = planWeek(goals, sessions, availability);
-    if (created.length) { setSessions(prev => [...prev, ...created]); flash(`${created.length} Einheiten vorgeschlagen`); }
-    else flash("Alles schon geplant 🎉");
+  const runPlan = (reset = false) => {
+    if (reset) {
+      const fresh = planWeek(goals, [], availability);
+      setSessions(fresh);
+      flash(`Woche neu geplant: ${fresh.length} Vorschläge`);
+    } else {
+      const created = planWeek(goals, sessions, availability);
+      if (created.length) { setSessions(prev => [...prev, ...created]); flash(`${created.length} Einheiten vorgeschlagen`); }
+      else flash("Alles schon geplant 🎉");
+    }
   };
 
   const requestNotifPermission = async () => {
@@ -788,17 +808,21 @@ export default function App() {
           />
         ) : (
           <div className="fw-shell">
-            <AppHeader level={level} xp={stats.xp} dark={dark} setDark={setDark} />
+            <AppHeader level={level} xp={stats.xp} dark={dark} setDark={setDark} onLevelClick={() => setStatsOpen(true)} />
             <main className="fw-main">
-              {view === "today"    && <TodayView {...{ goals, sessions, stats, level, setActive, completeSession, skipSession, goalById }} />}
-              {view === "week"     && <WeekView  {...{ goals, sessions, availability, runPlan, acceptSuggestion, acceptAll, skipSession, rescheduleSession, removeSession, completeSession, setActive, goalById, downloadIcs, googleLink, shiftSess, moveSession, addManualSession, editSession }} />}
-              {view === "goals"    && <GoalsView {...{ goals, setGoals, stats, weekHistory }} />}
+              {view === "today"    && <TodayView {...{ goals, sessions, stats, level, setActive, completeSession, skipSession, goalById, addNote }} />}
+              {view === "week"     && <WeekView  {...{ goals, sessions, availability, runPlan, acceptSuggestion, acceptAll, skipSession, rescheduleSession, removeSession, completeSession, setActive, goalById, downloadIcs, googleLink, shiftSess, moveSession, addManualSession, editSession, addNote }} />}
+              {view === "goals"    && <GoalsView {...{ goals, setGoals, stats, weekHistory, sessions }} />}
+              {view === "notes"    && <NotesView {...{ goals, sessions, goalById, addNote }} />}
               {view === "settings" && <SettingsView {...{ availability, setAvailability, pomo, setPomo, dark, setDark, notificationsEnabled, setNotificationsEnabled, requestNotifPermission, lang, setLang, user, skippedAuth, handleSkipAuth, reset: () => { setOnboarded(false); setGoals([]); setSessions([]); setWeekHistory([]); setStats({ xp:0,done:0,streaks:{},morningDone:false,currentWeekKey:getMondayKey() }); cloudSyncedRef.current=false; }}} />}
             </main>
             <AppNav view={view} setView={setView} />
           </div>
         )}
 
+        {statsOpen && (
+          <StatsModal level={level} xp={stats.xp} stats={stats} goals={goals} sessions={sessions} weekHistory={weekHistory} onClose={() => setStatsOpen(false)} />
+        )}
         {active && (
           <TimerOverlay sess={active} goal={goalById(active.goalId)} pomo={pomo}
             onClose={() => setActive(null)} onComplete={completeSession} />
@@ -828,7 +852,7 @@ export default function App() {
 }
 
 /* ------------------------------- header / nav ---------------------------- */
-function AppHeader({ level, xp, dark, setDark }) {
+function AppHeader({ level, xp, dark, setDark, onLevelClick }) {
   const t = useT();
   return (
     <header className="fw-header">
@@ -837,7 +861,7 @@ function AppHeader({ level, xp, dark, setDark }) {
         <div className="fw-sub">{t("daysFull")[todayIndex()]}, {new Date().toLocaleDateString("de-DE", { day:"numeric", month:"long" })}</div>
       </div>
       <div className="fw-header-right">
-        <div className="fw-levelpill"><Trophy size={15} /><span>{t("levelLabel", level)}</span></div>
+        <button className="fw-levelpill" onClick={onLevelClick}><Trophy size={15} /><span>{t("levelLabel", level)}</span></button>
         <div className="fw-xpmini"><Bar value={xpIntoLevel(xp)/200} from="#7c5cff" to="#36c5ff" h={6} /></div>
         <button className="fw-icon-btn" onClick={() => setDark(d => !d)} aria-label="Theme">
           {dark ? <Sun size={18} /> : <Moon size={18} />}
@@ -849,10 +873,11 @@ function AppHeader({ level, xp, dark, setDark }) {
 function AppNav({ view, setView }) {
   const t = useT();
   const items = [
-    { k:"today", labelKey:"navToday", icon:Clock },
-    { k:"week",  labelKey:"navWeek",  icon:Calendar },
-    { k:"goals", labelKey:"navGoals", icon:Target },
-    { k:"settings", labelKey:"navMore", icon:Cog },
+    { k:"today",    labelKey:"navToday",  icon:Clock },
+    { k:"week",     labelKey:"navWeek",   icon:Calendar },
+    { k:"goals",    labelKey:"navGoals",  icon:Target },
+    { k:"notes",    labelKey:"navNotes",  icon:NotebookPen },
+    { k:"settings", labelKey:"navMore",   icon:Cog },
   ];
   return (
     <nav className="fw-nav">
@@ -1264,7 +1289,7 @@ function CustomGoalBox({ onAdd }) {
 }
 
 /* -------------------------------- today ---------------------------------- */
-function TodayView({ goals, sessions, stats, level, setActive, completeSession, skipSession, goalById }) {
+function TodayView({ goals, sessions, stats, level, setActive, completeSession, skipSession, goalById, addNote }) {
   const t = useT();
   const di = todayIndex();
   const todays = sessions.filter(s => s.day === di && s.status !== "skipped").sort((a,b) => a.start - b.start);
@@ -1300,7 +1325,7 @@ function TodayView({ goals, sessions, stats, level, setActive, completeSession, 
           <div className="fw-section-h">{t("navToday")}</div>
           {todays.map(s => (
             <SessionRow key={s.id} sess={s} goal={goalById(s.goalId)}
-              onStart={() => setActive(s)} onDone={() => completeSession(s)} onSkip={() => skipSession(s)} />
+              onStart={() => setActive(s)} onDone={() => completeSession(s)} onSkip={() => skipSession(s)} addNote={addNote} />
           ))}
         </section>
       )}
@@ -1322,35 +1347,90 @@ function NextCard({ sess, goal, onStart, onDone }) {
       <div className="fw-next-title"><I size={24} /> {goal.name}</div>
       <div className="fw-next-meta">{sess.durationMin} min · {TYPES[goal.type].label}</div>
       <div className="fw-next-btns">
-        {sess.hasTimer !== false && <button className="fw-btn white" onClick={onStart}><Play size={18} /> {t("start")}</button>}
+        {goal?.hasTimer !== false && sess.hasTimer !== false && <button className="fw-btn white" onClick={onStart}><Play size={18} /> {t("start")}</button>}
         <button className="fw-btn glass" onClick={onDone}><Check size={18} /> {t("done")}</button>
       </div>
     </div>
   );
 }
 
-function SessionRow({ sess, goal, onStart, onDone, onSkip, compact }) {
+function SessionRow({ sess, goal, onStart, onDone, onSkip, compact, addNote }) {
   const t = useT();
+  const [noteOpen, setNoteOpen] = useState(false);
   if (!goal) return null;
   const [c1, c2] = ACCENTS[goal.color];
   const I = TYPES[goal.type].icon;
   const done = sess.status === "done";
   return (
-    <div className={done ? "fw-row done" : "fw-row"}>
-      <div className="fw-row-ico" style={{ background:`linear-gradient(135deg,${c1},${c2})` }}><I size={18} /></div>
-      <div className="fw-row-body">
-        <div className="fw-row-title">{goal.name}</div>
-        <div className="fw-row-sub">{minToLabel(sess.start)} · {sess.durationMin} min</div>
-      </div>
-      {done ? (
-        <div className="fw-row-check"><Check size={18} /></div>
-      ) : (
-        <div className="fw-row-actions">
-          {!compact && sess.hasTimer !== false && <button className="fw-mini" onClick={onStart} aria-label={t("start")}><Play size={16} /></button>}
-          <button className="fw-mini ok" onClick={onDone} aria-label={t("done")}><Check size={16} /></button>
-          {onSkip && <button className="fw-mini no" onClick={onSkip} aria-label={t("skip")}><X size={16} /></button>}
+    <>
+      <div className={done ? "fw-row done" : "fw-row"}>
+        <div className="fw-row-ico" style={{ background:`linear-gradient(135deg,${c1},${c2})` }}><I size={18} /></div>
+        <div className="fw-row-body">
+          <div className="fw-row-title">{goal.name}</div>
+          <div className="fw-row-sub">{minToLabel(sess.start)} · {sess.durationMin} min
+            {done && sess.mood && <span className="fw-row-mood">{sess.mood}</span>}
+          </div>
+          {done && sess.note && <div className="fw-row-note-preview">{sess.note}</div>}
         </div>
-      )}
+        {done ? (
+          <div className="fw-row-actions">
+            <button className="fw-mini note" onClick={() => setNoteOpen(true)} aria-label="Notiz"><FileText size={16}/></button>
+          </div>
+        ) : (
+          <div className="fw-row-actions">
+            {!compact && goal?.hasTimer !== false && sess.hasTimer !== false && <button className="fw-mini" onClick={onStart} aria-label={t("start")}><Play size={16} /></button>}
+            <button className="fw-mini ok" onClick={onDone} aria-label={t("done")}><Check size={16} /></button>
+            {onSkip && <button className="fw-mini no" onClick={onSkip} aria-label={t("skip")}><X size={16} /></button>}
+          </div>
+        )}
+      </div>
+      {noteOpen && <NoteModal sess={sess} goal={goal} onSave={(note, mood) => { addNote && addNote(sess.id, note, mood); setNoteOpen(false); }} onClose={() => setNoteOpen(false)} />}
+    </>
+  );
+}
+
+/* --------------------------------- note modal ---------------------------------- */
+const MOODS = ["😴","😐","🙂","💪","🔥"];
+function NoteModal({ sess, goal, onSave, onClose }) {
+  const [note, setNote] = useState(sess?.note || "");
+  const [mood, setMood] = useState(sess?.mood || "");
+  if (!sess || !goal) return null;
+  const [c1, c2] = ACCENTS[goal.color];
+  return (
+    <div className="fw-sheet-bg" onClick={onClose}>
+      <div className="fw-sheet" onClick={e => e.stopPropagation()}>
+        <div className="fw-sheet-handle" />
+        <div className="fw-sheet-hdr">
+          <div className="fw-sheet-hdr-ico" style={{ background:`linear-gradient(135deg,${c1},${c2})` }}><NotebookPen size={16}/></div>
+          <div className="fw-sheet-hdr-text">
+            <div className="fw-sheet-hdr-title">Notiz · {goal.name}</div>
+            <div className="fw-sheet-hdr-sub">{minToLabel(sess.start)} · {sess.durationMin} min</div>
+          </div>
+          <button className="fw-sheet-close" onClick={onClose}><X size={18}/></button>
+        </div>
+
+        <div className="fw-note-mood-row">
+          {MOODS.map(m => (
+            <button key={m} className={mood===m?"fw-mood-btn active":"fw-mood-btn"} onClick={() => setMood(m===mood?"":m)}>{m}</button>
+          ))}
+        </div>
+
+        <textarea
+          className="fw-note-area"
+          placeholder="Wie lief die Einheit? Was hat geholfen? Was möchtest du beim nächsten Mal verbessern?"
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          rows={5}
+          autoFocus
+        />
+
+        <div className="fw-sheet-actions">
+          <button className="fw-btn glass" onClick={onClose}>Abbrechen</button>
+          <button className="fw-btn solid" onClick={() => onSave(note, mood)}>
+            <Check size={16}/> Speichern
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1358,11 +1438,13 @@ function SessionRow({ sess, goal, onStart, onDone, onSkip, compact }) {
 /* --------------------------------- week ---------------------------------- */
 function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSuggestion, skipSession,
   rescheduleSession, removeSession, completeSession, setActive, goalById, shiftSess,
-  moveSession, addManualSession, editSession }) {
+  moveSession, addManualSession, editSession, addNote }) {
   const t = useT();
   const [dragId, setDragId]       = useState(null);
   const [dragOver, setDragOver]   = useState(null);
-  const [modal, setModal]         = useState(null); // { mode:"add"|"edit", day?, sess? }
+  const [modal, setModal]         = useState(null);
+  const [planMenu, setPlanMenu]   = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const hasSuggestions = sessions.some(s => s.status === "suggested");
   const planned = sessions.filter(s => s.status === "planned" || s.status === "done");
@@ -1385,7 +1467,31 @@ function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSug
   return (
     <div className="fw-stack">
       <div className="fw-week-bar">
-        <button className="fw-btn solid" onClick={runPlan}><Sparkles size={16} /> {t("planWeek")}</button>
+        <div style={{ position:"relative" }}>
+          <button className="fw-btn solid" onClick={() => setPlanMenu(v => !v)}>
+            <Sparkles size={16} /> {t("planWeek")} <ChevronDown size={14}/>
+          </button>
+          {planMenu && (
+            <div className="fw-plan-menu">
+              <button onClick={() => { runPlan(false); setPlanMenu(false); }}>
+                <Plus size={15}/> Fehlende ergänzen
+              </button>
+              {!confirmReset ? (
+                <button onClick={() => setConfirmReset(true)}>
+                  <RotateCw size={15}/> Woche neu planen
+                </button>
+              ) : (
+                <div className="fw-plan-menu-confirm">
+                  <span>Wirklich zurücksetzen?</span>
+                  <div style={{display:"flex",gap:6,marginTop:6}}>
+                    <button className="fw-plan-confirm-yes" onClick={() => { runPlan(true); setPlanMenu(false); setConfirmReset(false); }}>Ja</button>
+                    <button className="fw-plan-confirm-no" onClick={() => setConfirmReset(false)}>Nein</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
         <button className="fw-btn ghost" onClick={() => downloadIcs(planned, goals)} disabled={!planned.length}>
           <Download size={15} /> .ics
         </button>
@@ -1448,11 +1554,14 @@ function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSug
                           <button className="fw-mini no" onClick={() => removeSession(s.id)}><X size={15}/></button>
                         </>
                       ) : s.status === "done" ? (
-                        <a className="fw-mini g" href={googleLink(s, name)} target="_blank" rel="noreferrer"><Calendar size={15}/></a>
+                        <>
+                          <button className="fw-mini note" onClick={() => setModal({ mode:"note", sess:s })}><FileText size={14}/></button>
+                          <a className="fw-mini g" href={googleLink(s, name)} target="_blank" rel="noreferrer"><Calendar size={15}/></a>
+                        </>
                       ) : (
                         <>
                           <button className="fw-mini" onClick={() => setModal({ mode:"edit", sess:s })}><Pencil size={14}/></button>
-                          {s.hasTimer !== false && <button className="fw-mini" onClick={() => setActive(s)}><Play size={15}/></button>}
+                          {goalById(s.goalId)?.hasTimer !== false && s.hasTimer !== false && <button className="fw-mini" onClick={() => setActive(s)}><Play size={15}/></button>}
                           <button className="fw-mini ok" onClick={() => completeSession(s)}><Check size={15}/></button>
                           <button className="fw-mini no" onClick={() => skipSession(s)}><X size={15}/></button>
                         </>
@@ -1466,7 +1575,7 @@ function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSug
         );
       })}
 
-      {modal && (
+      {modal && modal.mode !== "note" && (
         <SessionModal
           modal={modal}
           goals={goals}
@@ -1474,6 +1583,14 @@ function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSug
           availability={availability}
           onAdd={addManualSession}
           onEdit={editSession}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal && modal.mode === "note" && (
+        <NoteModal
+          sess={modal.sess}
+          goal={goalById(modal.sess?.goalId)}
+          onSave={(note, mood) => { addNote && addNote(modal.sess.id, note, mood); setModal(null); }}
           onClose={() => setModal(null)}
         />
       )}
@@ -1616,7 +1733,7 @@ function SessionModal({ modal, goals, sessions, availability, onAdd, onEdit, onC
 }
 
 /* --------------------------------- goals --------------------------------- */
-function GoalsView({ goals, setGoals, stats, weekHistory }) {
+function GoalsView({ goals, setGoals, stats, weekHistory, sessions }) {
   const t = useT();
   const [adding, setAdding] = useState(false);
   const update = (id, patch) => setGoals(goals.map(g => g.id === id ? { ...g, ...patch } : g));
@@ -1625,7 +1742,7 @@ function GoalsView({ goals, setGoals, stats, weekHistory }) {
   const badges = computeBadges(stats, t);
   return (
     <div className="fw-stack">
-      <StatsSection weekHistory={weekHistory} />
+      <StatsSection weekHistory={weekHistory} goals={goals} stats={stats} sessions={sessions} />
       <section className="fw-badges">
         <div className="fw-section-h"><Award size={16} /> {t("achievements")}</div>
         <div className="fw-badge-grid">
@@ -1669,6 +1786,10 @@ function GoalsView({ goals, setGoals, stats, weekHistory }) {
                   style={{ background:`linear-gradient(135deg,${ACCENTS[k][0]},${ACCENTS[k][1]})` }} aria-label={k}/>
               ))}
             </div>
+            <div className="fw-goal-timer-row">
+              <span><Clock size={13}/> Mit Timer</span>
+              <button className={(g.hasTimer??true)?"fw-switch on":"fw-switch"} onClick={()=>update(g.id,{hasTimer:!(g.hasTimer??true)})}><i/></button>
+            </div>
           </div>
         );
       })}
@@ -1678,7 +1799,7 @@ function GoalsView({ goals, setGoals, stats, weekHistory }) {
 
 function GoalEditor({ onSave, onCancel }) {
   const t = useT();
-  const [f, setF] = useState({ name:"", type:"habit", color:"violet", perWeek:3, durationMin:30, pref:"any" });
+  const [f, setF] = useState({ name:"", type:"habit", color:"violet", perWeek:3, durationMin:30, pref:"any", hasTimer:true });
   return (
     <div className="fw-goal-card">
       <input className="fw-goal-name solo" placeholder={t("goalPlaceholder")} value={f.name}
@@ -1691,12 +1812,24 @@ function GoalEditor({ onSave, onCancel }) {
         </label>
         <label>{t("perWeekLabel")}<input type="number" min="1" max="7" value={f.perWeek} onChange={e=>setF({...f,perWeek:+e.target.value})}/></label>
         <label>{t("minutesLabel")}<input type="number" min="5" step="5" value={f.durationMin} onChange={e=>setF({...f,durationMin:+e.target.value})}/></label>
+        <label>Tageszeit
+          <select value={f.pref} onChange={e=>setF({...f,pref:e.target.value})}>
+            <option value="any">Egal</option>
+            <option value="morning">Morgens</option>
+            <option value="afternoon">Nachmittags</option>
+            <option value="evening">Abends</option>
+          </select>
+        </label>
       </div>
       <div className="fw-goal-colors">
         {ACCENT_KEYS.map(k=>(
           <button key={k} onClick={()=>setF({...f,color:k})} className={f.color===k?"fw-dot sel":"fw-dot"}
             style={{ background:`linear-gradient(135deg,${ACCENTS[k][0]},${ACCENTS[k][1]})` }} aria-label={k}/>
         ))}
+      </div>
+      <div className="fw-goal-timer-row">
+        <span><Clock size={13}/> Mit Timer</span>
+        <button className={f.hasTimer?"fw-switch on":"fw-switch"} type="button" onClick={()=>setF({...f,hasTimer:!f.hasTimer})}><i/></button>
       </div>
       <div className="fw-onb-row">
         <button className="fw-btn ghost" onClick={onCancel}>{t("cancel")}</button>
@@ -1718,27 +1851,142 @@ function computeBadges(stats, t) {
   ];
 }
 
-function StatsSection({ weekHistory }) {
+function StatsModal({ level, xp, stats, goals, sessions, weekHistory, onClose }) {
   const t = useT();
+  const badges = computeBadges(stats, t);
+  const xpToNext = 200 - xpIntoLevel(xp);
+  const totalMinutes = (sessions || []).filter(s => s.status === "done").reduce((a, s) => a + s.durationMin, 0);
+  const bestStreak = Math.max(0, ...Object.values(stats?.streaks || {}), 0);
+
+  return (
+    <div className="fw-sheet-bg" onClick={onClose}>
+      <div className="fw-sheet fw-stats-modal" onClick={e => e.stopPropagation()}>
+        <div className="fw-sheet-handle" />
+        <div className="fw-stats-modal-hero">
+          <div className="fw-stats-modal-trophy"><Trophy size={32}/></div>
+          <div className="fw-stats-modal-level">Level {level}</div>
+          <div className="fw-stats-modal-xp">{xp} XP · noch {xpToNext} XP bis Level {level+1}</div>
+          <div className="fw-stats-modal-bar">
+            <div className="fw-stats-modal-bar-fill" style={{ width:`${(xpIntoLevel(xp)/200)*100}%` }}/>
+          </div>
+        </div>
+
+        <div className="fw-stats-chips" style={{marginTop:0}}>
+          <div className="fw-stats-chip"><Flame size={14}/><span>{bestStreak} Serie</span></div>
+          <div className="fw-stats-chip"><Check size={14}/><span>{stats.done} erledigt</span></div>
+          <div className="fw-stats-chip"><Clock size={14}/><span>{Math.round(totalMinutes/60*10)/10} h</span></div>
+          <div className="fw-stats-chip"><BarChart2 size={14}/><span>{weekHistory.length} Wochen</span></div>
+        </div>
+
+        <div className="fw-section-h" style={{marginTop:16}}><Award size={15}/> Erfolge</div>
+        <div className="fw-badge-grid">
+          {badges.map(b => {
+            const I = b.icon;
+            return (
+              <div key={b.name} className={b.got ? "fw-badge got" : "fw-badge"}>
+                <I size={20}/>
+                <span>{b.name}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {weekHistory.length > 0 && (
+          <>
+            <div className="fw-section-h" style={{marginTop:16}}><BarChart2 size={15}/> Wochenverlauf</div>
+            <div className="fw-stats-list">
+              {weekHistory.slice(0,6).map(w => (
+                <div key={w.weekKey} className="fw-stats-row">
+                  <div className="fw-stats-label">{formatWeekKey(w.weekKey)}</div>
+                  <div className="fw-stats-bar-wrap">
+                    <div className="fw-stats-bar" style={{ width:`${Math.round(w.rate*100)}%`, background:`linear-gradient(90deg,${rateColor(w.rate)})` }}/>
+                  </div>
+                  <div className="fw-stats-meta">
+                    <span className="fw-stats-pct">{Math.round(w.rate*100)}%</span>
+                    <span className="fw-stats-count">{w.done}/{w.planned}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        <button className="fw-btn glass wide" style={{marginTop:16}} onClick={onClose}>Schließen</button>
+      </div>
+    </div>
+  );
+}
+
+function StatsSection({ weekHistory, goals, stats, sessions }) {
+  const t = useT();
+  const [tab, setTab] = useState("history"); // "history" | "goals"
+
+  const totalMinutes = (sessions || []).filter(s => s.status === "done")
+    .reduce((acc, s) => acc + s.durationMin, 0);
+  const bestStreak = Math.max(0, ...Object.values(stats?.streaks || {}), 0);
+
   return (
     <section className="fw-panel">
-      <div className="fw-section-h"><BarChart2 size={16} /> {t("history")}</div>
-      {weekHistory.length === 0 ? (
-        <div className="fw-day-empty">{t("noHistory")}</div>
-      ) : (
+      <div className="fw-section-h"><BarChart2 size={16} /> Statistiken</div>
+
+      {/* Summary chips */}
+      <div className="fw-stats-chips">
+        <div className="fw-stats-chip"><Trophy size={14}/><span>{stats?.xp ?? 0} XP</span></div>
+        <div className="fw-stats-chip"><Flame size={14}/><span>{bestStreak} Tage Serie</span></div>
+        <div className="fw-stats-chip"><Clock size={14}/><span>{Math.round(totalMinutes/60 * 10)/10} h</span></div>
+        <div className="fw-stats-chip"><Check size={14}/><span>{stats?.done ?? 0} Einheiten</span></div>
+      </div>
+
+      {/* Tab switch */}
+      <div className="fw-stats-tabs">
+        <button className={tab==="history"?"fw-stats-tab active":"fw-stats-tab"} onClick={()=>setTab("history")}>
+          Wochenverlauf
+        </button>
+        <button className={tab==="goals"?"fw-stats-tab active":"fw-stats-tab"} onClick={()=>setTab("goals")}>
+          Ziel-Übersicht
+        </button>
+      </div>
+
+      {tab === "history" && (
+        weekHistory.length === 0 ? (
+          <div className="fw-day-empty">{t("noHistory")}</div>
+        ) : (
+          <div className="fw-stats-list">
+            {weekHistory.map(w => (
+              <div key={w.weekKey} className="fw-stats-row">
+                <div className="fw-stats-label">{formatWeekKey(w.weekKey)}</div>
+                <div className="fw-stats-bar-wrap">
+                  <div className="fw-stats-bar" style={{ width:`${Math.round(w.rate*100)}%`, background:`linear-gradient(90deg,${rateColor(w.rate)})` }} />
+                </div>
+                <div className="fw-stats-meta">
+                  <span className="fw-stats-pct">{Math.round(w.rate*100)}%</span>
+                  <span className="fw-stats-count">{w.done}/{w.planned}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+
+      {tab === "goals" && (
         <div className="fw-stats-list">
-          {weekHistory.map(w => (
-            <div key={w.weekKey} className="fw-stats-row">
-              <div className="fw-stats-label">{formatWeekKey(w.weekKey)}</div>
-              <div className="fw-stats-bar-wrap">
-                <div className="fw-stats-bar" style={{ width:`${Math.round(w.rate*100)}%`, background:`linear-gradient(90deg,${rateColor(w.rate)})` }} />
+          {(goals || []).map(g => {
+            const done = (sessions||[]).filter(s => s.goalId === g.id && s.status === "done").length;
+            const streak = stats?.streaks?.[g.id] || 0;
+            const [c1, c2] = ACCENTS[g.color];
+            const I = TYPES[g.type]?.icon ?? Sparkles;
+            return (
+              <div key={g.id} className="fw-goal-stat-row">
+                <div className="fw-goal-stat-ico" style={{ background:`linear-gradient(135deg,${c1},${c2})` }}><I size={14}/></div>
+                <div className="fw-goal-stat-body">
+                  <div className="fw-goal-stat-name">{g.name}</div>
+                  <div className="fw-goal-stat-sub">{done} erledigt · {streak > 0 ? `${streak} Serie` : "keine aktive Serie"}</div>
+                </div>
+                <div className="fw-goal-stat-xp">{done * g.durationMin} XP</div>
               </div>
-              <div className="fw-stats-meta">
-                <span className="fw-stats-pct">{Math.round(w.rate*100)}%</span>
-                <span className="fw-stats-count">{w.done}/{w.planned}</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
+          {(!goals || goals.length === 0) && <div className="fw-day-empty">Noch keine Ziele</div>}
         </div>
       )}
     </section>
@@ -1780,6 +2028,103 @@ function WeekReviewModal({ summary, onContinue }) {
   );
 }
 
+/* --------------------------------- qr section ---------------------------------- */
+function QrSection() {
+  const [qrUrl, setQrUrl] = useState("");
+  const url = typeof window !== "undefined" ? window.location.origin : "";
+  useEffect(() => {
+    if (!url) return;
+    QRCode.toDataURL(url, { width:200, margin:2, color:{ dark:"#1d1b2e", light:"#ffffff" } })
+      .then(setQrUrl).catch(() => {});
+  }, [url]);
+  return (
+    <section className="fw-panel fw-qr-section">
+      <div className="fw-section-h"><QrCode size={16}/> App auf anderem Gerät öffnen</div>
+      <p className="fw-qr-lead">Scanne den QR-Code mit deinem Smartphone um FlowWeek direkt zu öffnen und als App zu installieren.</p>
+      {qrUrl && (
+        <div className="fw-qr-wrap">
+          <img src={qrUrl} alt="QR Code" className="fw-qr-img" />
+          <div className="fw-qr-url">{url}</div>
+        </div>
+      )}
+      <div className="fw-qr-hint">
+        <span>iOS: Teilen → „Zum Home-Bildschirm"</span>
+        <span>Android: Menü → „App installieren"</span>
+      </div>
+    </section>
+  );
+}
+
+/* --------------------------------- notes view ---------------------------------- */
+function NotesView({ goals, sessions, goalById, addNote }) {
+  const [noteModal, setNoteModal] = useState(null);
+  const [openGoal, setOpenGoal] = useState(null);
+
+  const noted = (sessions || []).filter(s => s.status === "done");
+  // group by goalId
+  const byGoal = {};
+  noted.forEach(s => {
+    if (!byGoal[s.goalId]) byGoal[s.goalId] = [];
+    byGoal[s.goalId].push(s);
+  });
+
+  const DAY_LABELS = ["Mo","Di","Mi","Do","Fr","Sa","So"];
+
+  return (
+    <div className="fw-stack">
+      <section className="fw-panel">
+        <div className="fw-section-h"><NotebookPen size={16}/> Notizen</div>
+        {goals.length === 0 && <div className="fw-day-empty">Noch keine Ziele</div>}
+        {goals.map(g => {
+          const entries = (byGoal[g.id] || []).sort((a,b) => b.day - a.day);
+          const [c1, c2] = ACCENTS[g.color];
+          const I = TYPES[g.type]?.icon ?? Sparkles;
+          const withNote = entries.filter(s => s.note || s.mood);
+          const isOpen = openGoal === g.id;
+          return (
+            <div key={g.id} className="fw-notes-goal">
+              <button className="fw-notes-goal-hdr" onClick={() => setOpenGoal(isOpen ? null : g.id)}>
+                <div className="fw-notes-goal-ico" style={{ background:`linear-gradient(135deg,${c1},${c2})` }}><I size={14}/></div>
+                <div className="fw-notes-goal-name">{g.name}</div>
+                <div className="fw-notes-goal-count">{withNote.length} {withNote.length===1?"Notiz":"Notizen"}</div>
+                <div className="fw-notes-goal-arrow">{isOpen ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}</div>
+              </button>
+
+              {isOpen && (
+                <div className="fw-notes-entries">
+                  {entries.length === 0 && <div className="fw-notes-empty">Noch keine Einheiten erledigt</div>}
+                  {entries.map(s => (
+                    <div key={s.id} className="fw-note-entry">
+                      <div className="fw-note-entry-meta">
+                        <span>{DAY_LABELS[s.day]} · {minToLabel(s.start)} · {s.durationMin} min</span>
+                        {s.mood && <span className="fw-note-mood">{s.mood}</span>}
+                        <button className="fw-mini note" onClick={() => setNoteModal({ sess:s, goal:g })} title="Notiz bearbeiten"><Pencil size={13}/></button>
+                      </div>
+                      {s.note
+                        ? <div className="fw-note-text">{s.note}</div>
+                        : <div className="fw-note-empty-hint" onClick={() => setNoteModal({ sess:s, goal:g })}>+ Notiz hinzufügen</div>
+                      }
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </section>
+
+      {noteModal && (
+        <NoteModal
+          sess={noteModal.sess}
+          goal={noteModal.goal}
+          onSave={(note, mood) => { addNote(noteModal.sess.id, note, mood); setNoteModal(null); }}
+          onClose={() => setNoteModal(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 function CollapsiblePanel({ icon, title, children }) {
   const [open, setOpen] = useState(false);
   return (
@@ -1799,12 +2144,27 @@ function SettingsView({ availability, setAvailability, pomo, setPomo, dark, setD
   user, skippedAuth, handleSkipAuth, reset }) {
   const t = useT();
   const [busy, setBusy] = useState({ day:0, start:"9", end:"17", label:"", recurring:true });
+  const [editingBusy, setEditingBusy] = useState(null); // index being edited
+  const [busyEdit, setBusyEdit] = useState(null);
   const addBusy = () => {
     if (+busy.end <= +busy.start) return;
     setAvailability({ ...availability, busy:[...availability.busy, { day:busy.day, start:+busy.start*60, end:+busy.end*60, label:busy.label||"Termin", recurring:busy.recurring }] });
     setBusy({ ...busy, label:"" });
   };
   const removeBusy = (i) => setAvailability({ ...availability, busy:availability.busy.filter((_,x)=>x!==i) });
+  const startEditBusy = (i) => {
+    const b = availability.busy[i];
+    setEditingBusy(i);
+    setBusyEdit({ day:b.day, start:String(b.start/60), end:String(b.end/60), label:b.label, recurring:b.recurring??false });
+  };
+  const saveBusyEdit = () => {
+    if (!busyEdit || +busyEdit.end <= +busyEdit.start) return;
+    const updated = availability.busy.map((b,x) => x===editingBusy
+      ? { day:busyEdit.day, start:+busyEdit.start*60, end:+busyEdit.end*60, label:busyEdit.label||"Termin", recurring:busyEdit.recurring }
+      : b);
+    setAvailability({ ...availability, busy:updated });
+    setEditingBusy(null); setBusyEdit(null);
+  };
   const canNotify = typeof window!=="undefined" && "Notification" in window;
 
   return (
@@ -1825,10 +2185,36 @@ function SettingsView({ availability, setAvailability, pomo, setPomo, dark, setD
         <div className="fw-section-h"><Calendar size={16}/> {t("blockedTitle")}</div>
         {availability.busy.length===0 && <div className="fw-day-empty">{t("noBlocked")}</div>}
         {availability.busy.map((b,i)=>(
-          <div className="fw-busy-row" key={i}>
-            <span>{b.recurring && <span className="fw-recurring-badge"><RotateCw size={11}/></span>}{t("daysFull")[b.day]} · {minToLabel(b.start)}–{minToLabel(b.end)} · {b.label}</span>
-            <button className="fw-mini no" onClick={()=>removeBusy(i)}><Trash2 size={14}/></button>
-          </div>
+          editingBusy === i && busyEdit ? (
+            <div key={i} className="fw-busy-edit">
+              <div className="fw-busy-add" style={{ flexWrap:"wrap" }}>
+                <select value={busyEdit.day} onChange={e=>setBusyEdit({...busyEdit,day:+e.target.value})}>
+                  {t("daysFull").map((d,j)=><option key={j} value={j}>{d}</option>)}
+                </select>
+                <input type="number" min="0" max="23" value={busyEdit.start} onChange={e=>setBusyEdit({...busyEdit,start:e.target.value})}/>
+                <input type="number" min="1" max="24" value={busyEdit.end} onChange={e=>setBusyEdit({...busyEdit,end:e.target.value})}/>
+                <input placeholder="Label" value={busyEdit.label} onChange={e=>setBusyEdit({...busyEdit,label:e.target.value})} style={{ flex:1, minWidth:70 }}/>
+              </div>
+              <div className="fw-busy-recurring">
+                <label className="fw-recurring-label">
+                  <input type="checkbox" checked={busyEdit.recurring} onChange={e=>setBusyEdit({...busyEdit,recurring:e.target.checked})}/>
+                  <RotateCw size={13}/> {t("recurringLabel")}
+                </label>
+              </div>
+              <div style={{ display:"flex", gap:6, marginTop:8 }}>
+                <button className="fw-btn ghost sm" onClick={()=>{setEditingBusy(null);setBusyEdit(null);}}>Abbrechen</button>
+                <button className="fw-btn solid sm" onClick={saveBusyEdit}><Check size={14}/> Speichern</button>
+              </div>
+            </div>
+          ) : (
+            <div className="fw-busy-row" key={i}>
+              <span>{b.recurring && <span className="fw-recurring-badge"><RotateCw size={11}/></span>}{t("daysFull")[b.day]} · {minToLabel(b.start)}–{minToLabel(b.end)} · {b.label}</span>
+              <div style={{ display:"flex", gap:5 }}>
+                <button className="fw-mini" onClick={()=>startEditBusy(i)}><Pencil size={13}/></button>
+                <button className="fw-mini no" onClick={()=>removeBusy(i)}><Trash2 size={13}/></button>
+              </div>
+            </div>
+          )
         ))}
         <div className="fw-busy-add">
           <select value={busy.day} onChange={e=>setBusy({...busy,day:+e.target.value})}>
@@ -1921,6 +2307,9 @@ function SettingsView({ availability, setAvailability, pomo, setPomo, dark, setD
           <button className={dark?"fw-switch on":"fw-switch"} onClick={()=>setDark(d=>!d)}><i/></button>
         </div>
       </section>
+
+      {/* QR Code Sync */}
+      <QrSection />
 
       <button className="fw-btn danger wide" onClick={()=>{ if(confirm(t("resetConfirm"))) reset(); }}>
         <Trash2 size={15}/> {t("resetAll")}
@@ -2038,8 +2427,19 @@ const CSS = `
 .fw-logo.big{font-size:34px}
 .fw-sub{color:var(--muted);font-size:12.5px;margin-top:2px}
 .fw-header-right{display:flex;align-items:center;gap:10px}
-.fw-levelpill{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12.5px;background:var(--card);padding:7px 11px;border-radius:999px;box-shadow:var(--shadow);font-family:'Outfit'}
+.fw-levelpill{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12.5px;background:var(--card);padding:7px 11px;border-radius:999px;box-shadow:var(--shadow);font-family:'Outfit';border:none;cursor:pointer;color:var(--text);transition:.15s}
+.fw-levelpill:hover{box-shadow:0 0 0 2px #7c5cff44;transform:translateY(-1px)}
 .fw-levelpill svg{color:#ffb020}
+
+/* stats modal */
+.fw-stats-modal{max-height:85vh;overflow-y:auto}
+.fw-stats-modal-hero{text-align:center;padding:16px 0 12px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.fw-stats-modal-trophy{width:64px;height:64px;border-radius:20px;background:linear-gradient(135deg,#ffb020,#ff7c20);display:flex;align-items:center;justify-content:center;color:#fff;margin:0 auto 10px}
+.fw-stats-modal-level{font-size:22px;font-weight:800;font-family:'Outfit'}
+.fw-stats-modal-xp{font-size:12px;color:var(--muted);margin:4px 0 10px}
+.fw-stats-modal-bar{height:8px;border-radius:999px;background:var(--line);overflow:hidden;width:100%}
+.fw-stats-modal-bar-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#7c5cff,#36c5ff);transition:width .6s}
+.fw-badge-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
 .fw-xpmini{width:64px}
 .fw-icon-btn{border:none;background:var(--card);width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:var(--text);box-shadow:var(--shadow);cursor:pointer}
 
@@ -2198,6 +2598,18 @@ const CSS = `
 .fw-splash-feat-desc{font-size:12px;color:var(--muted)}
 .fw-splash-hint{text-align:center;color:var(--muted);font-size:12px;margin-top:8px}
 
+/* bottom sheet / modal overlay */
+.fw-sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.fw-sheet{background:var(--card);border-radius:28px 28px 0 0;width:100%;max-width:560px;padding:12px 20px 32px;display:flex;flex-direction:column;gap:12px}
+.fw-sheet-handle{width:40px;height:4px;border-radius:999px;background:var(--line);margin:0 auto 4px}
+.fw-sheet-hdr{display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.fw-sheet-hdr-ico{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;color:#fff;flex-shrink:0}
+.fw-sheet-hdr-text{flex:1}
+.fw-sheet-hdr-title{font-size:15px;font-weight:700}
+.fw-sheet-hdr-sub{font-size:12px;color:var(--muted)}
+.fw-sheet-close{border:none;background:none;color:var(--muted);cursor:pointer;padding:4px}
+.fw-sheet-actions{display:flex;gap:8px;margin-top:4px}
+
 /* login */
 .fw-login-icon{width:56px;height:56px;border-radius:18px;background:linear-gradient(135deg,#7c5cff,#36c5ff);display:grid;place-items:center;color:#fff;margin:0 auto 12px}
 .fw-login-title{font-family:'Outfit';font-weight:800;font-size:22px;text-align:center;margin:0 0 6px}
@@ -2256,6 +2668,78 @@ const CSS = `
 .fw-stats-meta{display:flex;flex-direction:column;align-items:flex-end;gap:1px;width:38px;flex-shrink:0}
 .fw-stats-pct{font-size:12px;font-weight:700}
 .fw-stats-count{font-size:10px;color:var(--muted)}
+
+/* plan menu dropdown */
+.fw-plan-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:40;background:var(--card);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);min-width:200px;overflow:hidden;border:1px solid var(--line)}
+.fw-plan-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:12px 16px;background:none;border:none;font-size:14px;color:var(--text);cursor:pointer;text-align:left;transition:.15s}
+.fw-plan-menu button:hover{background:var(--card2);color:#7c5cff}
+.fw-plan-menu button:first-child{border-bottom:1px solid var(--line)}
+.fw-plan-menu-confirm{padding:12px 16px;border-top:1px solid var(--line);font-size:13px;font-weight:600;color:var(--text)}
+.fw-plan-confirm-yes{flex:1;padding:6px 12px;border-radius:8px;border:none;background:linear-gradient(90deg,#7c5cff,#36c5ff);color:#fff;font-size:13px;font-weight:700;cursor:pointer}
+.fw-plan-confirm-no{flex:1;padding:6px 12px;border-radius:8px;border:1.5px solid var(--line);background:none;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer}
+
+/* busy time edit row */
+.fw-busy-edit{background:var(--card2);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;margin-bottom:4px}
+.fw-busy-edit-row{display:flex;align-items:center;gap:8px}
+.fw-busy-edit input[type=time]{flex:1;border:1.5px solid var(--line);background:var(--card);border-radius:10px;padding:8px 10px;font-size:13px;color:var(--text)}
+.fw-busy-edit input[type=text]{flex:1;border:1.5px solid var(--line);background:var(--card);border-radius:10px;padding:8px 10px;font-size:13px;color:var(--text)}
+.fw-busy-edit-actions{display:flex;gap:6px;justify-content:flex-end}
+
+/* goal timer toggle row */
+.fw-goal-timer-row{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;margin-top:6px;border-top:1px solid var(--line)}
+.fw-goal-timer-row span{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
+
+/* stats chips + tabs */
+.fw-stats-chips{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.fw-stats-chip{display:flex;align-items:center;gap:5px;padding:6px 12px;background:var(--card2);border-radius:999px;font-size:12px;font-weight:700;color:var(--text)}
+.fw-stats-chip svg{color:#7c5cff}
+.fw-stats-tabs{display:flex;gap:0;border:1.5px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:12px}
+.fw-stats-tab{flex:1;border:none;background:none;padding:9px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;transition:.15s}
+.fw-stats-tab.active{background:linear-gradient(90deg,#7c5cff,#36c5ff);color:#fff}
+
+/* per-goal stat rows */
+.fw-goal-stat-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.fw-goal-stat-row:last-child{border-bottom:none}
+.fw-goal-stat-ico{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff}
+.fw-goal-stat-body{flex:1;min-width:0}
+.fw-goal-stat-name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fw-goal-stat-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.fw-goal-stat-xp{font-size:12px;font-weight:700;color:#7c5cff;flex-shrink:0}
+
+/* note modal */
+.fw-note-mood-row{display:flex;gap:10px;justify-content:center;margin:8px 0 14px}
+.fw-mood-btn{font-size:26px;border:2px solid transparent;border-radius:12px;padding:6px 10px;background:var(--card2);cursor:pointer;transition:.15s;line-height:1}
+.fw-mood-btn.active{border-color:#7c5cff;background:rgba(124,92,255,.12)}
+.fw-note-area{width:100%;border:1.5px solid var(--line);background:var(--card2);border-radius:14px;padding:12px 14px;font-size:14px;color:var(--text);resize:none;font-family:inherit;line-height:1.6;box-sizing:border-box}
+.fw-note-area:focus{outline:none;border-color:#7c5cff}
+.fw-mini.note{color:#7c5cff}
+.fw-row-mood{margin-left:6px;font-size:16px}
+.fw-row-note-preview{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+
+/* notes view */
+.fw-notes-goal{border-bottom:1px solid var(--line)}
+.fw-notes-goal:last-child{border-bottom:none}
+.fw-notes-goal-hdr{display:flex;align-items:center;gap:10px;width:100%;border:none;background:none;padding:12px 0;cursor:pointer;text-align:left}
+.fw-notes-goal-ico{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff}
+.fw-notes-goal-name{flex:1;font-size:14px;font-weight:700}
+.fw-notes-goal-count{font-size:12px;color:var(--muted);white-space:nowrap}
+.fw-notes-goal-arrow{color:var(--muted);flex-shrink:0}
+.fw-notes-entries{display:flex;flex-direction:column;gap:10px;padding:0 0 14px 38px}
+.fw-notes-empty{font-size:13px;color:var(--muted)}
+.fw-note-entry{background:var(--card2);border-radius:12px;padding:10px 12px}
+.fw-note-entry-meta{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-bottom:4px}
+.fw-note-entry-meta span:first-child{flex:1}
+.fw-note-mood{font-size:16px}
+.fw-note-text{font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap}
+.fw-note-empty-hint{font-size:12px;color:#7c5cff;cursor:pointer;padding:4px 0}
+
+/* qr section */
+.fw-qr-section{text-align:center}
+.fw-qr-lead{font-size:13px;color:var(--muted);line-height:1.5;margin:6px 0 14px}
+.fw-qr-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:12px}
+.fw-qr-img{border-radius:12px;width:180px;height:180px}
+.fw-qr-url{font-size:11px;color:var(--muted);word-break:break-all}
+.fw-qr-hint{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);background:var(--card2);border-radius:10px;padding:10px 14px;text-align:left}
 
 /* confetti */
 .fw-confetti{position:fixed;inset:0;pointer-events:none;z-index:80;overflow:hidden}
