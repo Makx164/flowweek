@@ -12,16 +12,16 @@ import {
   FileText, QrCode, NotebookPen,
 } from "lucide-react";
 import QRCode from "qrcode";
-import { fbReady, onAuth, signInGoogle, signInApple, signInEmail, signUpEmail, signOutUser, loadCloud, saveCloud } from "./firebase.js";
+import { fbReady, onAuth, signInGoogle, signInApple, signInEmail, signUpEmail, signOutUser, loadCloud, saveCloud, deleteAccount } from "./firebase.js";
 
 /* ----------------------------- design tokens ----------------------------- */
 const ACCENTS = {
-  coral:  ["#ff6b6b", "#ff9f45"],
-  violet: ["#7c5cff", "#a06bff"],
-  blue:   ["#4f7dff", "#36c5ff"],
-  green:  ["#18c29c", "#46d97f"],
-  amber:  ["#ff9f1c", "#ffd23f"],
-  pink:   ["#ff5fa2", "#ff8fc8"],
+  coral:  ["#D85A30", "#D85A30"],
+  violet: ["#534AB7", "#534AB7"],
+  blue:   ["#2E6BC6", "#2E6BC6"],
+  green:  ["#1D9E75", "#1D9E75"],
+  amber:  ["#BA7517", "#BA7517"],
+  pink:   ["#C44D78", "#C44D78"],
 };
 const ACCENT_KEYS = Object.keys(ACCENTS);
 
@@ -32,11 +32,11 @@ const TYPES = {
 };
 
 const TEMPLATES = [
-  { name: "Workout",    type: "sport", color: "coral",  perWeek: 3, durationMin: 45, pref: "evening",   icon: Dumbbell },
-  { name: "Laufen",    type: "sport", color: "blue",   perWeek: 3, durationMin: 30, pref: "morning",   icon: Dumbbell },
-  { name: "Lesen",     type: "focus", color: "violet", perWeek: 5, durationMin: 25, pref: "evening",   icon: BookOpen },
-  { name: "Lernen",    type: "focus", color: "blue",   perWeek: 4, durationMin: 50, pref: "afternoon", icon: Brain },
-  { name: "Meditation",type: "habit", color: "green",  perWeek: 7, durationMin: 10, pref: "morning",   icon: Brain },
+  { name: "Workout",    type: "sport", color: "coral",  perWeek: 3, durationMin: 45, pref: "evening",   iconId: "dumbbell" },
+  { name: "Laufen",     type: "sport", color: "blue",   perWeek: 3, durationMin: 30, pref: "morning",   iconId: "wind" },
+  { name: "Lesen",      type: "focus", color: "violet", perWeek: 5, durationMin: 25, pref: "evening",   iconId: "book" },
+  { name: "Lernen",     type: "focus", color: "blue",   perWeek: 4, durationMin: 50, pref: "afternoon", iconId: "brain" },
+  { name: "Meditation", type: "habit", color: "green",  perWeek: 7, durationMin: 10, pref: "morning",   iconId: "leaf" },
 ];
 
 const CUSTOM_ICONS = [
@@ -58,6 +58,7 @@ const CUSTOM_ICONS = [
   { id:"target",   Ic: Target },
 ];
 const iconById = (id) => (CUSTOM_ICONS.find(x => x.id === id) ?? CUSTOM_ICONS[0]).Ic;
+const goalIcon = (g) => g?.iconId ? iconById(g.iconId) : (TYPES[g?.type]?.icon ?? Sparkles);
 
 /* ------------------------------- i18n ------------------------------------ */
 const T = {
@@ -92,7 +93,14 @@ const T = {
     addGoal: "Hinzufügen", cancel: "Abbrechen", goalPlaceholder: "Name des Ziels",
     // badges
     badge1:"Erster Schritt", badge2:"Aufgewärmt", badge3:"In Flammen",
-    badge4:"Frühstarter", badge5:"Level 5", badge6:"100 XP",
+    badge4:"Frühstarter", badge5:"Level 5", badge6:"100 XP", badge7:"Betatester ❤️",
+    badge1Desc:"Schließe deine erste Einheit ab.",
+    badge2Desc:"Schließe 5 Einheiten ab.",
+    badge3Desc:"Erreiche eine 3er-Serie bei einem Ziel.",
+    badge4Desc:"Schließe eine Einheit vor 12 Uhr ab.",
+    badge5Desc:"Erreiche Level 5 durch gesammelte XP.",
+    badge6Desc:"Sammle insgesamt 100 XP.",
+    badge7Desc:"Dabei seit der Beta — danke für dein Vertrauen!",
     // settings
     wakeTitle: "Wachzeiten", wakeStart: "Start", wakeEnd: "Ende",
     blockedTitle: "Feste Termine / Sperrzeiten",
@@ -145,9 +153,9 @@ const T = {
     onbGoalsLead: "Wähle aus, was dir wichtig ist. Du kannst alles jederzeit anpassen.",
     onbMore: "Weiter",
     onbWhenTitle: "Wann bist du wach?",
-    onbWhenLead: "FlowWeek plant Einheiten nur in diesem Zeitfenster. Feste Termine trägst du im nächsten Schritt eintragen.",
+    onbWhenLead: "sidequest plant Einheiten nur in diesem Zeitfenster. Feste Termine trägst du im nächsten Schritt eintragen.",
     onbBlockedTitle: "Feste Termine",
-    onbBlockedLead: "Trag ein, wann du nicht verfügbar bist — Arbeit, Schule, Arzt etc. FlowWeek plant drumherum.",
+    onbBlockedLead: "Trag ein, wann du nicht verfügbar bist — Arbeit, Schule, Arzt etc. sidequest plant drumherum.",
     onbCalUpload: "Kalender-Screenshot hochladen",
     onbCalUploadHint: "Lade einen Screenshot deines Kalenders hoch, um Termine leichter abzulesen.",
     onbGo: "Loslegen",
@@ -168,11 +176,11 @@ const T = {
     customGoalDesc: "Beschreibung (optional)",
     customGoalAdd: "Hinzufügen",
     impressumTitle: "Impressum",
-    impressumBody: "[Dein Name / Firmenname]\n[Straße Hausnummer]\n[PLZ Ort], [Land]\n\nE-Mail: [deine@email.de]\nTelefon: [+49 ...]\n\nVerantwortlich für den Inhalt nach § 55 Abs. 2 RStV:\n[Dein Name], [Anschrift wie oben]",
+    impressumBody: "Maximilian Hillert\n\nE-Mail: hello@yoursidequest.org\n\nVerantwortlich für den Inhalt nach § 55 Abs. 2 RStV:\nMaximilian Hillert",
     contactTitle: "Kontakt",
     contactLead: "Fragen, Feedback oder Bugs? Schreib uns gerne.",
     contactBtn: "E-Mail schreiben",
-    contactEmail: "kontakt@flowweek.app",
+    contactEmail: "hello@yoursidequest.org",
   },
   en: {
     days:     ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
@@ -199,7 +207,14 @@ const T = {
     typeLabel: "Type", perWeekLabel: "Per week", minutesLabel: "Minutes", timeLabel: "Time",
     addGoal: "Add", cancel: "Cancel", goalPlaceholder: "Goal name",
     badge1:"First step", badge2:"Warmed up", badge3:"On fire",
-    badge4:"Early bird", badge5:"Level 5", badge6:"100 XP",
+    badge4:"Early bird", badge5:"Level 5", badge6:"100 XP", badge7:"Beta tester ❤️",
+    badge1Desc:"Complete your first session.",
+    badge2Desc:"Complete 5 sessions.",
+    badge3Desc:"Reach a 3-session streak on any goal.",
+    badge4Desc:"Complete a session before noon.",
+    badge5Desc:"Reach level 5 through earned XP.",
+    badge6Desc:"Collect a total of 100 XP.",
+    badge7Desc:"Here since the beta — thank you for your trust!",
     wakeTitle: "Awake hours", wakeStart: "Start", wakeEnd: "End",
     blockedTitle: "Blocked times",
     noBlocked: "No blocked times — open for scheduling.",
@@ -247,9 +262,9 @@ const T = {
     onbGoalsLead: "Pick what matters to you. You can adjust everything later.",
     onbMore: "Continue",
     onbWhenTitle: "When are you awake?",
-    onbWhenLead: "FlowWeek only schedules sessions within this window. Add fixed appointments in the next step.",
+    onbWhenLead: "sidequest only schedules sessions within this window. Add fixed appointments in the next step.",
     onbBlockedTitle: "Fixed appointments",
-    onbBlockedLead: "Add times when you're unavailable — work, school, doctor etc. FlowWeek plans around them.",
+    onbBlockedLead: "Add times when you're unavailable — work, school, doctor etc. sidequest plans around them.",
     onbCalUpload: "Upload calendar screenshot",
     onbCalUploadHint: "Upload a screenshot of your calendar to easily read off your appointments.",
     onbGo: "Let's go",
@@ -269,11 +284,11 @@ const T = {
     customGoalDesc: "Description (optional)",
     customGoalAdd: "Add",
     impressumTitle: "Legal notice",
-    impressumBody: "[Your name / company]\n[Street, number]\n[ZIP city], [Country]\n\nEmail: [your@email.com]\nPhone: [+1 ...]\n\nResponsible for content: [Your name]",
+    impressumBody: "Maximilian Hillert\n\nEmail: hello@yoursidequest.org\n\nResponsible for content: Maximilian Hillert",
     contactTitle: "Contact",
     contactLead: "Questions, feedback or bugs? We'd love to hear from you.",
     contactBtn: "Send an email",
-    contactEmail: "contact@flowweek.app",
+    contactEmail: "hello@yoursidequest.org",
   },
 };
 
@@ -377,14 +392,15 @@ function planWeek(goals, sessions, availability) {
   return created;
 }
 
-function findReplacement(goal, sessions, availability, fromDay) {
+function findReplacement(goal, sessions, availability, fromDay, excludeDay, excludeStart) {
   const wake = [availability.wakeStart, availability.wakeEnd];
   const order = [...Array(7).keys()].filter(d=>d>=fromDay).concat([...Array(7).keys()].filter(d=>d<fromDay));
   for (const d of order) {
     const occ = buildOccupied(sessions, availability.busy, d);
+    if (d === excludeDay) occ.push([excludeStart, excludeStart + goal.durationMin]);
     let st = findSlot(goal.durationMin, windowFor(goal.pref, wake), occ);
     if (st == null) st = findSlot(goal.durationMin, wake, occ);
-    if (st != null) return { id: uid(), goalId: goal.id, day: d, start: st, durationMin: goal.durationMin, status: "suggested" };
+    if (st != null) return { id: uid(), goalId: goal.id, day: d, start: st, durationMin: goal.durationMin, status: "suggested", hasTimer: goal.hasTimer ?? true };
   }
   return null;
 }
@@ -405,18 +421,18 @@ function sessionDates(s) {
   return { start, end };
 }
 function downloadIcs(sessions, goals) {
-  const gname = (id) => goals.find(g => g.id === id)?.name || "FlowWeek";
-  const lines = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//FlowWeek//DE","CALSCALE:GREGORIAN"];
+  const gname = (id) => goals.find(g => g.id === id)?.name || "sidequest";
+  const lines = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//sidequest//DE","CALSCALE:GREGORIAN"];
   sessions.forEach(s => {
     const { start, end } = sessionDates(s);
-    lines.push("BEGIN:VEVENT",`UID:${s.id}@flowweek`,`DTSTAMP:${dtLocal(new Date())}`,
+    lines.push("BEGIN:VEVENT",`UID:${s.id}@sidequest`,`DTSTAMP:${dtLocal(new Date())}`,
       `DTSTART:${dtLocal(start)}`,`DTEND:${dtLocal(end)}`,`SUMMARY:${gname(s.goalId)}`,"END:VEVENT");
   });
   lines.push("END:VCALENDAR");
   const blob = new Blob([lines.join("\r\n")], { type: "text/calendar" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = "flowweek-woche.ics"; a.click();
+  a.href = url; a.download = "sidequest-woche.ics"; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 function googleLink(s, name) {
@@ -426,10 +442,13 @@ function googleLink(s, name) {
 }
 
 /* ------------------------------- storage --------------------------------- */
-const KEY = "flowweek:v1";
+const KEY = "sidequest:v1";
 async function loadState() {
-  try { const r = localStorage.getItem(KEY); return r ? JSON.parse(r) : null; }
-  catch { return null; }
+  try {
+    let r = localStorage.getItem(KEY);
+    if (!r) { r = localStorage.getItem("flowweek:v1"); if (r) localStorage.setItem(KEY, r); }
+    return r ? JSON.parse(r) : null;
+  } catch { return null; }
 }
 async function saveState(state) {
   try { localStorage.setItem(KEY, JSON.stringify(state)); }
@@ -519,7 +538,7 @@ function LoginView({ onSkip }) {
       <div className="fw-onb-card">
         <div className="fw-onb-glow" />
         <div className="fw-login-icon"><Trophy size={28} /></div>
-        <div className="fw-logo" style={{ textAlign:"center", marginBottom:6 }}>Flow<span>Week</span></div>
+        <div className="fw-logo" style={{ textAlign:"center", marginBottom:6 }}>sidequest</div>
         <h2 className="fw-login-title">{t("authTitle")}</h2>
         <p className="fw-login-lead">{t("authLead")}</p>
         <button className="fw-login-google" onClick={handleGoogle} disabled={!!loading}>
@@ -553,7 +572,7 @@ export default function App() {
   const [goals, setGoals]                       = useState([]);
   const [sessions, setSessions]                 = useState([]);
   const [availability, setAvailability]         = useState({ wakeStart:420, wakeEnd:1380, busy:[] });
-  const [stats, setStats]                       = useState({ xp:0, done:0, streaks:{}, morningDone:false, currentWeekKey:null });
+  const [stats, setStats]                       = useState({ xp:0, done:0, streaks:{}, morningDone:false, currentWeekKey:null, isBetaUser:true });
   const [pomo, setPomo]                         = useState({ work:25, brk:5 });
   const [weekHistory, setWeekHistory]           = useState([]);
   const [showReview, setShowReview]             = useState(false);
@@ -565,6 +584,8 @@ export default function App() {
   const [celebrate, setCelebrate]               = useState(false);
   const [toast, setToast]                       = useState(null);
   const [replan, setReplan]                     = useState(null);
+  const [gamification, setGamification]         = useState(true);
+  const [exportMode, setExportMode]             = useState("google");
 
   // Auth
   const [user, setUser]                         = useState(undefined);
@@ -591,6 +612,7 @@ export default function App() {
         setDark(s.dark ?? false);
         setNotificationsEnabled(s.notificationsEnabled ?? false);
         setLang(s.lang ?? "de");
+        setGamification(s.gamification ?? true);
         if (isNewWeek && s.onboarded) {
           const raw = s.sessions ?? [];
           const planned = raw.filter(x => x.status !== "skipped").length;
@@ -603,14 +625,14 @@ export default function App() {
           setPendingReview(summary);
           setShowReview(true);
           setSessions([]);
-          setStats({ ...(s.stats ?? {}), currentWeekKey: currentKey, morningDone:false, xp:(s.stats?.xp??0)+bonus });
+          setStats({ ...(s.stats ?? {}), currentWeekKey: currentKey, morningDone:false, xp:(s.stats?.xp??0)+bonus, isBetaUser: true });
         } else {
           setWeekHistory(s.weekHistory ?? []);
           setSessions(s.sessions ?? []);
-          setStats({ ...(s.stats ?? {}), currentWeekKey: currentKey });
+          setStats({ ...(s.stats ?? {}), currentWeekKey: currentKey, isBetaUser: true });
         }
       } else {
-        setStats(prev => ({ ...prev, currentWeekKey: currentKey }));
+        setStats(prev => ({ ...prev, currentWeekKey: currentKey, isBetaUser: true }));
       }
       setLoaded(true);
     })();
@@ -650,12 +672,12 @@ export default function App() {
   useEffect(() => {
     if (!loaded) return;
     clearTimeout(saveT.current);
-    const state = { onboarded, goals, sessions, availability, stats, pomo, dark, weekHistory, notificationsEnabled, lang };
+    const state = { onboarded, goals, sessions, availability, stats, pomo, dark, weekHistory, notificationsEnabled, lang, gamification };
     saveT.current = setTimeout(() => {
       saveState(state);
       if (user) saveCloud(user.uid, state);
     }, 400);
-  }, [loaded, onboarded, goals, sessions, availability, stats, pomo, dark, weekHistory, notificationsEnabled, lang, user]);
+  }, [loaded, onboarded, goals, sessions, availability, stats, pomo, dark, weekHistory, notificationsEnabled, lang, gamification, user]);
 
   /* push notification check */
   useEffect(() => {
@@ -688,15 +710,20 @@ export default function App() {
   /* session actions */
   const completeSession = (sess) => {
     const g = goalById(sess.goalId);
+    const sessName = g?.name ?? sess.customName ?? "Einheit";
     setSessions(prev => prev.map(s => s.id === sess.id ? { ...s, status:"done" } : s));
     setStats(prev => {
       const prevLevel = levelFromXp(prev.xp);
       const xp = prev.xp + Math.max(10, sess.durationMin);
-      const streaks = { ...prev.streaks, [sess.goalId]:(prev.streaks[sess.goalId]||0)+1 };
+      const streaks = sess.goalId ? { ...prev.streaks, [sess.goalId]:(prev.streaks[sess.goalId]||0)+1 } : prev.streaks;
       const morningDone = prev.morningDone || sess.start < 720;
-      if (levelFromXp(xp) > prevLevel) { fireCelebrate(); flash(`Level ${levelFromXp(xp)} erreicht!`); }
-      else if (streaks[sess.goalId] === 3) { fireCelebrate(); flash(`${g?.name}: 3er-Serie!`); }
-      else flash(`+${Math.max(10, sess.durationMin)} XP für ${g?.name}`);
+      if (gamification) {
+        if (levelFromXp(xp) > prevLevel) { fireCelebrate(); flash(`Level ${levelFromXp(xp)} erreicht!`); }
+        else if (sess.goalId && streaks[sess.goalId] === 3) { fireCelebrate(); flash(`${sessName}: 3er-Serie!`); }
+        else flash(`+${Math.max(10, sess.durationMin)} XP für ${sessName}`);
+      } else {
+        flash(`${sessName} erledigt ✓`);
+      }
       return { ...prev, xp, done:prev.done+1, streaks, morningDone };
     });
     setActive(null);
@@ -704,10 +731,11 @@ export default function App() {
 
   const skipSession = (sess) => {
     setSessions(prev => prev.map(s => s.id === sess.id ? { ...s, status:"skipped" } : s));
-    setStats(prev => ({ ...prev, streaks:{ ...prev.streaks, [sess.goalId]:0 } }));
+    if (sess.goalId) setStats(prev => ({ ...prev, streaks:{ ...prev.streaks, [sess.goalId]:0 } }));
     const g = goalById(sess.goalId);
+    if (!g) { flash("Übersprungen."); return; }
     const after = sessions.map(s => s.id === sess.id ? { ...s, status:"skipped" } : s);
-    const repl = g ? findReplacement(g, after, availability, sess.day) : null;
+    const repl = findReplacement(g, after, availability, (sess.day + 1) % 7, sess.day, sess.start);
     if (repl) setReplan(repl);
     else flash("Kein freier Ersatz-Slot diese Woche gefunden.");
   };
@@ -808,19 +836,19 @@ export default function App() {
           />
         ) : (
           <div className="fw-shell">
-            <AppHeader level={level} xp={stats.xp} dark={dark} setDark={setDark} onLevelClick={() => setStatsOpen(true)} />
+            <AppHeader level={level} xp={stats.xp} dark={dark} setDark={setDark} onLevelClick={() => setStatsOpen(true)} gamification={gamification} />
             <main className="fw-main">
-              {view === "today"    && <TodayView {...{ goals, sessions, stats, level, setActive, completeSession, skipSession, goalById, addNote }} />}
-              {view === "week"     && <WeekView  {...{ goals, sessions, availability, runPlan, acceptSuggestion, acceptAll, skipSession, rescheduleSession, removeSession, completeSession, setActive, goalById, downloadIcs, googleLink, shiftSess, moveSession, addManualSession, editSession, addNote }} />}
-              {view === "goals"    && <GoalsView {...{ goals, setGoals, stats, weekHistory, sessions }} />}
+              {view === "today"    && <TodayView {...{ goals, sessions, stats, level, setActive, completeSession, skipSession, goalById, addNote, gamification, exportMode }} />}
+              {view === "week"     && <WeekView  {...{ goals, sessions, availability, runPlan, acceptSuggestion, acceptAll, skipSession, rescheduleSession, removeSession, completeSession, setActive, goalById, shiftSess, moveSession, addManualSession, editSession, addNote, exportMode, setExportMode }} />}
+              {view === "goals"    && <GoalsView {...{ goals, setGoals, stats, weekHistory, sessions, gamification }} />}
               {view === "notes"    && <NotesView {...{ goals, sessions, goalById, addNote }} />}
-              {view === "settings" && <SettingsView {...{ availability, setAvailability, pomo, setPomo, dark, setDark, notificationsEnabled, setNotificationsEnabled, requestNotifPermission, lang, setLang, user, skippedAuth, handleSkipAuth, reset: () => { setOnboarded(false); setGoals([]); setSessions([]); setWeekHistory([]); setStats({ xp:0,done:0,streaks:{},morningDone:false,currentWeekKey:getMondayKey() }); cloudSyncedRef.current=false; }}} />}
+              {view === "settings" && <SettingsView {...{ availability, setAvailability, pomo, setPomo, dark, setDark, notificationsEnabled, setNotificationsEnabled, requestNotifPermission, lang, setLang, user, skippedAuth, handleSkipAuth, gamification, setGamification, reset: () => { setOnboarded(false); setGoals([]); setSessions([]); setWeekHistory([]); setStats({ xp:0,done:0,streaks:{},morningDone:false,currentWeekKey:getMondayKey() }); cloudSyncedRef.current=false; }}} />}
             </main>
             <AppNav view={view} setView={setView} />
           </div>
         )}
 
-        {statsOpen && (
+        {statsOpen && gamification && (
           <StatsModal level={level} xp={stats.xp} stats={stats} goals={goals} sessions={sessions} weekHistory={weekHistory} onClose={() => setStatsOpen(false)} />
         )}
         {active && (
@@ -852,19 +880,16 @@ export default function App() {
 }
 
 /* ------------------------------- header / nav ---------------------------- */
-function AppHeader({ level, xp, dark, setDark, onLevelClick }) {
+function AppHeader({ level, xp, dark, setDark, onLevelClick, gamification }) {
   const t = useT();
   return (
     <header className="fw-header">
-      <div>
-        <div className="fw-logo">Flow<span>Week</span></div>
-        <div className="fw-sub">{t("daysFull")[todayIndex()]}, {new Date().toLocaleDateString("de-DE", { day:"numeric", month:"long" })}</div>
-      </div>
+      <div className="fw-logo">sidequest</div>
       <div className="fw-header-right">
-        <button className="fw-levelpill" onClick={onLevelClick}><Trophy size={15} /><span>{t("levelLabel", level)}</span></button>
-        <div className="fw-xpmini"><Bar value={xpIntoLevel(xp)/200} from="#7c5cff" to="#36c5ff" h={6} /></div>
+        <span className="fw-header-date">{t("daysFull")[todayIndex()]}, {new Date().toLocaleDateString("de-DE", { day:"numeric", month:"long" })}</span>
+        {gamification && <button className="fw-levelpill" onClick={onLevelClick}>lvl {level}</button>}
         <button className="fw-icon-btn" onClick={() => setDark(d => !d)} aria-label="Theme">
-          {dark ? <Sun size={18} /> : <Moon size={18} />}
+          {dark ? <Sun size={16} /> : <Moon size={16} />}
         </button>
       </div>
     </header>
@@ -902,7 +927,7 @@ function Onboarding({ onDone, fbReady }) {
   const [step, setStep] = useState(0);
   const [picked, setPicked] = useState(() =>
     TEMPLATES.filter(t => ["Workout","Lesen","Meditation"].includes(t.name)).map(t => ({
-      id:uid(), name:t.name, type:t.type, color:t.color, perWeek:t.perWeek, durationMin:t.durationMin, pref:t.pref,
+      id:uid(), name:t.name, type:t.type, color:t.color, perWeek:t.perWeek, durationMin:t.durationMin, pref:t.pref, iconId:t.iconId,
     }))
   );
   const [wake, setWake] = useState({ start:7, end:23 });
@@ -948,7 +973,7 @@ function Onboarding({ onDone, fbReady }) {
   const toggle = (tmpl) => {
     const exists = picked.find(p => p.name === tmpl.name);
     if (exists) setPicked(picked.filter(p => p.name !== tmpl.name));
-    else setPicked([...picked, { id:uid(), name:tmpl.name, type:tmpl.type, color:tmpl.color, perWeek:tmpl.perWeek, durationMin:tmpl.durationMin, pref:tmpl.pref }]);
+    else setPicked([...picked, { id:uid(), name:tmpl.name, type:tmpl.type, color:tmpl.color, perWeek:tmpl.perWeek, durationMin:tmpl.durationMin, pref:tmpl.pref, iconId:tmpl.iconId }]);
   };
 
   return (
@@ -960,9 +985,9 @@ function Onboarding({ onDone, fbReady }) {
         {step === 0 && (
           <>
             <div className="fw-splash-icon-wrap">
-              <div className="fw-splash-icon">F</div>
+              <div className="fw-splash-icon">sq</div>
             </div>
-            <div className="fw-logo big" style={{ textAlign:"center" }}>Flow<span>Week</span></div>
+            <div className="fw-logo big" style={{ textAlign:"center" }}>sidequest</div>
             <p className="fw-splash-tagline">{t("onbTagline").split("\n").map((line,i) => <span key={i}>{line}<br/></span>)}</p>
             <p className="fw-onb-lead">{t("onbLead")}</p>
             <div className="fw-splash-feats">
@@ -1048,13 +1073,13 @@ function Onboarding({ onDone, fbReady }) {
             <div className="fw-templates">
               {TEMPLATES.map(tmpl => {
                 const on = !!picked.find(p => p.name === tmpl.name);
-                const [c1, c2] = ACCENTS[tmpl.color];
-                const I = tmpl.icon;
+                const [c1] = ACCENTS[tmpl.color];
+                const I = iconById(tmpl.iconId);
                 return (
                   <button key={tmpl.name} onClick={() => toggle(tmpl)}
                     className={on ? "fw-tmpl on" : "fw-tmpl"}
-                    style={on ? { background:`linear-gradient(135deg,${c1},${c2})`, color:"#fff", borderColor:"transparent" } : {}}>
-                    <I size={18} /><span>{tmpl.name}</span>
+                    style={on ? { background:c1, color:"#fff", borderColor:"transparent" } : {}}>
+                    <I size={16} /><span>{tmpl.name}</span>
                     <small>{tmpl.perWeek}×/Woche · {tmpl.durationMin}min</small>
                   </button>
                 );
@@ -1289,27 +1314,33 @@ function CustomGoalBox({ onAdd }) {
 }
 
 /* -------------------------------- today ---------------------------------- */
-function TodayView({ goals, sessions, stats, level, setActive, completeSession, skipSession, goalById, addNote }) {
+function TodayView({ goals, sessions, stats, level, setActive, completeSession, skipSession, goalById, addNote, gamification, exportMode }) {
   const t = useT();
   const di = todayIndex();
   const todays = sessions.filter(s => s.day === di && s.status !== "skipped").sort((a,b) => a.start - b.start);
   const doneToday = todays.filter(s => s.status === "done").length;
   const progress = todays.length ? doneToday / todays.length : 0;
   const next = todays.find(s => s.status !== "done");
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Guten Morgen." : hour < 17 ? "Guten Tag." : "Guten Abend.";
   return (
     <div className="fw-stack">
       <section className="fw-hero">
-        <Ring value={progress} from="#7c5cff" to="#36c5ff">
-          <div className="fw-hero-center">
-            <div className="fw-hero-pct">{Math.round(progress*100)}%</div>
-            <div className="fw-hero-lbl">{doneToday}/{todays.length} {t("navToday").toLowerCase()}</div>
-          </div>
-        </Ring>
-        <div className="fw-hero-meta">
-          <div className="fw-stat"><Trophy size={16} />{t("xpStat", stats.xp, level)}</div>
-          <div className="fw-stat"><Flame  size={16} />{t("streakStat", Math.max(0,...Object.values(stats.streaks||{}),0))}</div>
-          <div className="fw-stat"><Check  size={16} />{t("doneStat", stats.done)}</div>
+        <div className="fw-greeting">{greeting}</div>
+        <div className="fw-greeting-sub">
+          {todays.length ? `${todays.length} Quests heute. ${doneToday === todays.length ? "Alles erledigt." : `${doneToday}/${todays.length} erledigt.`}` : "Heute stehen keine Quests an."}
         </div>
+        {todays.length > 0 && (
+          <div className="fw-progress">
+            <div className="fw-progress-bar">
+              {todays.map(s => {
+                const g = goalById(s.goalId);
+                const [c] = ACCENTS[g?.color ?? s.customColor ?? "violet"];
+                return <div key={s.id} className="fw-progress-fill" style={{ flex:1, background: s.status === "done" ? c : "var(--line)", borderRadius:3 }} />;
+              })}
+            </div>
+          </div>
+        )}
       </section>
       {next ? (
         <NextCard sess={next} goal={goalById(next.goalId)} onStart={() => setActive(next)} onDone={() => completeSession(next)} />
@@ -1325,7 +1356,7 @@ function TodayView({ goals, sessions, stats, level, setActive, completeSession, 
           <div className="fw-section-h">{t("navToday")}</div>
           {todays.map(s => (
             <SessionRow key={s.id} sess={s} goal={goalById(s.goalId)}
-              onStart={() => setActive(s)} onDone={() => completeSession(s)} onSkip={() => skipSession(s)} addNote={addNote} />
+              onStart={() => setActive(s)} onDone={() => completeSession(s)} onSkip={() => skipSession(s)} addNote={addNote} exportMode={exportMode} />
           ))}
         </section>
       )}
@@ -1335,38 +1366,43 @@ function TodayView({ goals, sessions, stats, level, setActive, completeSession, 
 
 function NextCard({ sess, goal, onStart, onDone }) {
   const t = useT();
-  if (!goal) return null;
-  const [c1, c2] = ACCENTS[goal.color];
-  const I = TYPES[goal.type].icon;
+  const name  = goal?.name ?? sess.customName ?? "Einheit";
+  const color = goal?.color ?? sess.customColor ?? "violet";
+  const [c1] = ACCENTS[color];
+  const I = goal ? goalIcon(goal) : (sess.customIconId ? iconById(sess.customIconId) : Sparkles);
+  const showTimer = (goal?.hasTimer ?? true) && sess.hasTimer !== false;
   return (
-    <div className="fw-next" style={{ background:`linear-gradient(135deg,${c1},${c2})` }}>
+    <div className="fw-next" style={{ background:c1 }}>
       <div className="fw-next-top">
-        <span className="fw-next-eyebrow">{t("nextUp")}</span>
-        <span className="fw-next-time"><Clock size={14} /> {minToLabel(sess.start)}</span>
+        <div className="fw-next-dot"><I size={20}/></div>
+        <div className="fw-next-info">
+          <div className="fw-next-title">{name}</div>
+          <div className="fw-next-meta">{sess.durationMin} min · {minToLabel(sess.start)}</div>
+        </div>
       </div>
-      <div className="fw-next-title"><I size={24} /> {goal.name}</div>
-      <div className="fw-next-meta">{sess.durationMin} min · {TYPES[goal.type].label}</div>
       <div className="fw-next-btns">
-        {goal?.hasTimer !== false && sess.hasTimer !== false && <button className="fw-btn white" onClick={onStart}><Play size={18} /> {t("start")}</button>}
-        <button className="fw-btn glass" onClick={onDone}><Check size={18} /> {t("done")}</button>
+        {showTimer && <button className="fw-btn outline" onClick={onStart}><Play size={16} /> {t("start")}</button>}
+        <button className="fw-btn solid" onClick={onDone}><Check size={16} /> {t("done")}</button>
       </div>
     </div>
   );
 }
 
-function SessionRow({ sess, goal, onStart, onDone, onSkip, compact, addNote }) {
+function SessionRow({ sess, goal, onStart, onDone, onSkip, compact, addNote, exportMode }) {
   const t = useT();
   const [noteOpen, setNoteOpen] = useState(false);
-  if (!goal) return null;
-  const [c1, c2] = ACCENTS[goal.color];
-  const I = TYPES[goal.type].icon;
+  const name  = goal?.name ?? sess.customName ?? "Einheit";
+  const color = goal?.color ?? sess.customColor ?? "violet";
+  const [c1] = ACCENTS[color];
+  const I = goal ? goalIcon(goal) : (sess.customIconId ? iconById(sess.customIconId) : Sparkles);
   const done = sess.status === "done";
+  const showTimer = (goal?.hasTimer ?? true) && sess.hasTimer !== false;
   return (
     <>
-      <div className={done ? "fw-row done" : "fw-row"}>
-        <div className="fw-row-ico" style={{ background:`linear-gradient(135deg,${c1},${c2})` }}><I size={18} /></div>
+      <div className={done ? "fw-row done" : "fw-row"} style={{ background:c1 }}>
+        <div className="fw-row-ico"><I size={16}/></div>
         <div className="fw-row-body">
-          <div className="fw-row-title">{goal.name}</div>
+          <div className="fw-row-title">{name}</div>
           <div className="fw-row-sub">{minToLabel(sess.start)} · {sess.durationMin} min
             {done && sess.mood && <span className="fw-row-mood">{sess.mood}</span>}
           </div>
@@ -1375,16 +1411,17 @@ function SessionRow({ sess, goal, onStart, onDone, onSkip, compact, addNote }) {
         {done ? (
           <div className="fw-row-actions">
             <button className="fw-mini note" onClick={() => setNoteOpen(true)} aria-label="Notiz"><FileText size={16}/></button>
+            <SessionCalBtn sess={sess} name={name} exportMode={exportMode || "google"} />
           </div>
         ) : (
           <div className="fw-row-actions">
-            {!compact && goal?.hasTimer !== false && sess.hasTimer !== false && <button className="fw-mini" onClick={onStart} aria-label={t("start")}><Play size={16} /></button>}
+            {!compact && showTimer && <button className="fw-mini" onClick={onStart} aria-label={t("start")}><Play size={16} /></button>}
             <button className="fw-mini ok" onClick={onDone} aria-label={t("done")}><Check size={16} /></button>
             {onSkip && <button className="fw-mini no" onClick={onSkip} aria-label={t("skip")}><X size={16} /></button>}
           </div>
         )}
       </div>
-      {noteOpen && <NoteModal sess={sess} goal={goal} onSave={(note, mood) => { addNote && addNote(sess.id, note, mood); setNoteOpen(false); }} onClose={() => setNoteOpen(false)} />}
+      {noteOpen && <NoteModal sess={sess} goal={{ name, color, ...(goal||{}) }} onSave={(note, mood) => { addNote && addNote(sess.id, note, mood); setNoteOpen(false); }} onClose={() => setNoteOpen(false)} />}
     </>
   );
 }
@@ -1435,10 +1472,65 @@ function NoteModal({ sess, goal, onSave, onClose }) {
   );
 }
 
+/* ----------------------------- calendar export ----------------------------- */
+function CalendarExportMenu({ planned, goals, exportMode, setExportMode }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [open]);
+  const gname = (id) => goals.find(g => g.id === id)?.name || "sidequest";
+  const runExport = (mode) => {
+    setExportMode(mode);
+    if (mode === "ics") downloadIcs(planned, goals);
+    else planned.forEach(s => window.open(googleLink(s, gname(s.goalId)), "_blank"));
+    setOpen(false);
+  };
+  const label = exportMode === "ics" ? ".ics" : "Google";
+  const Ico = exportMode === "ics" ? Download : Calendar;
+  return (
+    <div style={{ position:"relative" }} ref={ref}>
+      <button className="fw-btn ghost" onClick={() => setOpen(v => !v)} disabled={!planned.length}>
+        <Ico size={14} /> {label} <ChevronDown size={12}/>
+      </button>
+      {open && (
+        <div className="fw-export-menu">
+          <button onClick={() => runExport("ics")} className={exportMode==="ics"?"active":""}>
+            <Download size={15}/> .ics herunterladen
+          </button>
+          <button onClick={() => runExport("google")} className={exportMode==="google"?"active":""}>
+            <Calendar size={15}/> Google Kalender
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SessionCalBtn({ sess, name, exportMode }) {
+  if (exportMode === "google") {
+    return <a className="fw-mini" href={googleLink(sess, name)} target="_blank" rel="noreferrer" aria-label="Kalender"><Calendar size={14}/></a>;
+  }
+  const exportIcs = () => {
+    const lines = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//SideQuest//DE","CALSCALE:GREGORIAN"];
+    const { start, end } = sessionDates(sess);
+    lines.push("BEGIN:VEVENT",`UID:${sess.id}@sidequest`,`DTSTAMP:${dtLocal(new Date())}`,
+      `DTSTART:${dtLocal(start)}`,`DTEND:${dtLocal(end)}`,`SUMMARY:${name}`,"END:VEVENT","END:VCALENDAR");
+    const blob = new Blob([lines.join("\r\n")], { type:"text/calendar" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `${name.replace(/\s+/g,"-")}.ics`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  };
+  return <button className="fw-mini" onClick={exportIcs} aria-label="Kalender"><Download size={14}/></button>;
+}
+
 /* --------------------------------- week ---------------------------------- */
 function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSuggestion, skipSession,
   rescheduleSession, removeSession, completeSession, setActive, goalById, shiftSess,
-  moveSession, addManualSession, editSession, addNote }) {
+  moveSession, addManualSession, editSession, addNote, exportMode, setExportMode }) {
   const t = useT();
   const [dragId, setDragId]       = useState(null);
   const [dragOver, setDragOver]   = useState(null);
@@ -1473,9 +1565,6 @@ function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSug
           </button>
           {planMenu && (
             <div className="fw-plan-menu">
-              <button onClick={() => { runPlan(false); setPlanMenu(false); }}>
-                <Plus size={15}/> Fehlende ergänzen
-              </button>
               {!confirmReset ? (
                 <button onClick={() => setConfirmReset(true)}>
                   <RotateCw size={15}/> Woche neu planen
@@ -1492,9 +1581,7 @@ function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSug
             </div>
           )}
         </div>
-        <button className="fw-btn ghost" onClick={() => downloadIcs(planned, goals)} disabled={!planned.length}>
-          <Download size={15} /> .ics
-        </button>
+        <CalendarExportMenu planned={planned} goals={goals} exportMode={exportMode} setExportMode={setExportMode} />
       </div>
       {hasSuggestions && (
         <div className="fw-suggest-banner">
@@ -1529,7 +1616,7 @@ function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSug
                 const color = goal?.color ?? s.customColor ?? "violet";
                 const itype = goal?.type  ?? s.customType  ?? "habit";
                 const [c1, c2] = ACCENTS[color];
-                const I = s.customIconId ? iconById(s.customIconId) : (TYPES[itype]?.icon ?? Sparkles);
+                const I = s.customIconId ? iconById(s.customIconId) : (goal ? goalIcon(goal) : Sparkles);
                 const suggested = s.status === "suggested";
                 const isDragging = dragId === s.id;
                 return (
@@ -1537,9 +1624,10 @@ function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSug
                     draggable={s.status !== "done"}
                     onDragStart={e => handleDragStart(e, s.id)}
                     onDragEnd={() => { setDragId(null); setDragOver(null); }}
-                    className={["fw-week-card", suggested && "suggested", isDragging && "dragging"].filter(Boolean).join(" ")}>
+                    className={["fw-week-card", suggested && "suggested", isDragging && "dragging"].filter(Boolean).join(" ")}
+                    style={{ background:c1 }}>
                     <div className="fw-drag-handle" aria-hidden>⠿</div>
-                    <div className="fw-wc-ico" style={{ background:`linear-gradient(135deg,${c1},${c2})` }}><I size={16}/></div>
+                    <div className="fw-wc-ico"><I size={14}/></div>
                     <div className="fw-wc-body">
                       <div className="fw-wc-title">{name}{s.status==="done"&&<Check size={14}/>}</div>
                       <div className="fw-wc-sub">{minToLabel(s.start)} · {s.durationMin} min</div>
@@ -1556,7 +1644,7 @@ function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSug
                       ) : s.status === "done" ? (
                         <>
                           <button className="fw-mini note" onClick={() => setModal({ mode:"note", sess:s })}><FileText size={14}/></button>
-                          <a className="fw-mini g" href={googleLink(s, name)} target="_blank" rel="noreferrer"><Calendar size={15}/></a>
+                          <SessionCalBtn sess={s} name={name} exportMode={exportMode} />
                         </>
                       ) : (
                         <>
@@ -1733,26 +1821,15 @@ function SessionModal({ modal, goals, sessions, availability, onAdd, onEdit, onC
 }
 
 /* --------------------------------- goals --------------------------------- */
-function GoalsView({ goals, setGoals, stats, weekHistory, sessions }) {
+function GoalsView({ goals, setGoals, stats, weekHistory, sessions, gamification }) {
   const t = useT();
   const [adding, setAdding] = useState(false);
   const update = (id, patch) => setGoals(goals.map(g => g.id === id ? { ...g, ...patch } : g));
   const remove = (id) => setGoals(goals.filter(g => g.id !== id));
   const add = (g) => { setGoals([...goals, g]); setAdding(false); };
-  const badges = computeBadges(stats, t);
   return (
     <div className="fw-stack">
       <StatsSection weekHistory={weekHistory} goals={goals} stats={stats} sessions={sessions} />
-      <section className="fw-badges">
-        <div className="fw-section-h"><Award size={16} /> {t("achievements")}</div>
-        <div className="fw-badge-grid">
-          {badges.map(b => (
-            <div key={b.name} className={b.got ? "fw-badge got" : "fw-badge"}>
-              <b.icon size={18}/><span>{b.name}</span>
-            </div>
-          ))}
-        </div>
-      </section>
       <div className="fw-section-h between">
         <span><Target size={16} /> {t("goalsTitle")}</span>
         <button className="fw-btn ghost sm" onClick={() => setAdding(v => !v)}><Plus size={15} /> {t("newGoal")}</button>
@@ -1760,12 +1837,12 @@ function GoalsView({ goals, setGoals, stats, weekHistory, sessions }) {
       {adding && <GoalEditor onSave={add} onCancel={() => setAdding(false)} />}
       {goals.map(g => {
         const [c1, c2] = ACCENTS[g.color];
-        const I = TYPES[g.type].icon;
+        const I = goalIcon(g);
         const streak = stats.streaks?.[g.id] || 0;
         return (
           <div key={g.id} className="fw-goal-card">
             <div className="fw-goal-top">
-              <div className="fw-goal-ico" style={{ background:`linear-gradient(135deg,${c1},${c2})` }}><I size={18}/></div>
+              <div className="fw-goal-ico" style={{ background:`${c1}14`, color:c1 }}><I size={16}/></div>
               <input className="fw-goal-name" value={g.name} onChange={e => update(g.id,{name:e.target.value})} />
               {streak > 0 && <span className="fw-goal-streak"><Flame size={13}/> {streak}</span>}
               <button className="fw-mini no" onClick={() => remove(g.id)}><Trash2 size={15}/></button>
@@ -1779,11 +1856,20 @@ function GoalsView({ goals, setGoals, stats, weekHistory, sessions }) {
                 </select>
               </label>
             </div>
+            <div className="fw-cg-icons" style={{ marginTop:10 }}>
+              {CUSTOM_ICONS.map(({ id, Ic }) => (
+                <button key={id} onClick={() => update(g.id, { iconId:id })}
+                  className={(g.iconId||"dumbbell")===id?"fw-cg-icon sel":"fw-cg-icon"}
+                  style={(g.iconId||"dumbbell")===id?{ background:`${c1}14`, color:c1, borderColor:c1 }:{}}>
+                  <Ic size={14}/>
+                </button>
+              ))}
+            </div>
             <div className="fw-goal-colors">
               {ACCENT_KEYS.map(k=>(
                 <button key={k} onClick={()=>update(g.id,{color:k})}
                   className={g.color===k?"fw-dot sel":"fw-dot"}
-                  style={{ background:`linear-gradient(135deg,${ACCENTS[k][0]},${ACCENTS[k][1]})` }} aria-label={k}/>
+                  style={{ background:ACCENTS[k][0] }} aria-label={k}/>
               ))}
             </div>
             <div className="fw-goal-timer-row">
@@ -1799,32 +1885,34 @@ function GoalsView({ goals, setGoals, stats, weekHistory, sessions }) {
 
 function GoalEditor({ onSave, onCancel }) {
   const t = useT();
-  const [f, setF] = useState({ name:"", type:"habit", color:"violet", perWeek:3, durationMin:30, pref:"any", hasTimer:true });
+  const [f, setF] = useState({ name:"", type:"habit", color:"violet", iconId:"star", perWeek:3, durationMin:30, pref:"any", hasTimer:true });
+  const [c1] = ACCENTS[f.color];
   return (
     <div className="fw-goal-card">
       <input className="fw-goal-name solo" placeholder={t("goalPlaceholder")} value={f.name}
         onChange={e => setF({...f, name:e.target.value})} />
       <div className="fw-goal-grid">
-        <label>{t("typeLabel")}
-          <select value={f.type} onChange={e=>setF({...f,type:e.target.value})}>
-            {Object.entries(t("types")).map(([k,v])=><option key={k} value={k}>{v}</option>)}
-          </select>
-        </label>
         <label>{t("perWeekLabel")}<input type="number" min="1" max="7" value={f.perWeek} onChange={e=>setF({...f,perWeek:+e.target.value})}/></label>
         <label>{t("minutesLabel")}<input type="number" min="5" step="5" value={f.durationMin} onChange={e=>setF({...f,durationMin:+e.target.value})}/></label>
-        <label>Tageszeit
+        <label>{t("timeLabel")}
           <select value={f.pref} onChange={e=>setF({...f,pref:e.target.value})}>
-            <option value="any">Egal</option>
-            <option value="morning">Morgens</option>
-            <option value="afternoon">Nachmittags</option>
-            <option value="evening">Abends</option>
+            {Object.entries(t("prefs")).map(([k,v])=><option key={k} value={k}>{v}</option>)}
           </select>
         </label>
+      </div>
+      <div className="fw-cg-icons" style={{ marginTop:10 }}>
+        {CUSTOM_ICONS.map(({ id, Ic }) => (
+          <button key={id} onClick={() => setF({...f, iconId:id})}
+            className={f.iconId===id?"fw-cg-icon sel":"fw-cg-icon"}
+            style={f.iconId===id?{ background:`${c1}14`, color:c1, borderColor:c1 }:{}}>
+            <Ic size={14}/>
+          </button>
+        ))}
       </div>
       <div className="fw-goal-colors">
         {ACCENT_KEYS.map(k=>(
           <button key={k} onClick={()=>setF({...f,color:k})} className={f.color===k?"fw-dot sel":"fw-dot"}
-            style={{ background:`linear-gradient(135deg,${ACCENTS[k][0]},${ACCENTS[k][1]})` }} aria-label={k}/>
+            style={{ background:ACCENTS[k][0] }} aria-label={k}/>
         ))}
       </div>
       <div className="fw-goal-timer-row">
@@ -1842,13 +1930,39 @@ function GoalEditor({ onSave, onCancel }) {
 function computeBadges(stats, t) {
   const maxStreak = Math.max(0, ...Object.values(stats.streaks||{}), 0);
   return [
-    { name:t("badge1"), icon:Check,   got:stats.done>=1 },
-    { name:t("badge2"), icon:Dumbbell,got:stats.done>=5 },
-    { name:t("badge3"), icon:Flame,   got:maxStreak>=3 },
-    { name:t("badge4"), icon:Sun,     got:!!stats.morningDone },
-    { name:t("badge5"), icon:Trophy,  got:levelFromXp(stats.xp)>=5 },
-    { name:t("badge6"), icon:Sparkles,got:stats.xp>=100 },
+    { name:t("badge1"), desc:t("badge1Desc"), icon:Check,    got:stats.done>=1 },
+    { name:t("badge2"), desc:t("badge2Desc"), icon:Dumbbell, got:stats.done>=5 },
+    { name:t("badge3"), desc:t("badge3Desc"), icon:Flame,    got:maxStreak>=3 },
+    { name:t("badge4"), desc:t("badge4Desc"), icon:Sun,      got:!!stats.morningDone },
+    { name:t("badge5"), desc:t("badge5Desc"), icon:Trophy,   got:levelFromXp(stats.xp)>=5 },
+    { name:t("badge6"), desc:t("badge6Desc"), icon:Sparkles, got:stats.xp>=100 },
+    { name:t("badge7"), desc:t("badge7Desc"), icon:Heart,    got:!!stats.isBetaUser },
   ];
+}
+
+function BadgeItem({ badge, size = 18 }) {
+  const [open, setOpen] = useState(false);
+  const I = badge.icon;
+  return (
+    <>
+      <button className={badge.got ? "fw-badge got" : "fw-badge"} onClick={() => setOpen(true)}>
+        <I size={size}/><span>{badge.name}</span>
+      </button>
+      {open && (
+        <div className="fw-badge-popup-bg" onClick={() => setOpen(false)}>
+          <div className="fw-badge-popup" onClick={e => e.stopPropagation()}>
+            <div className={badge.got ? "fw-badge-popup-ico got" : "fw-badge-popup-ico"}>
+              <I size={28}/>
+            </div>
+            <div className="fw-badge-popup-name">{badge.name}</div>
+            <div className="fw-badge-popup-desc">{badge.desc}</div>
+            <div className={badge.got ? "fw-badge-popup-status unlocked" : "fw-badge-popup-status locked"}>{badge.got ? "✓ Freigeschaltet" : "Noch nicht erreicht"}</div>
+            <button className="fw-btn ghost sm" style={{ marginTop:10 }} onClick={() => setOpen(false)}>Schließen</button>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 function StatsModal({ level, xp, stats, goals, sessions, weekHistory, onClose }) {
@@ -1880,15 +1994,7 @@ function StatsModal({ level, xp, stats, goals, sessions, weekHistory, onClose })
 
         <div className="fw-section-h" style={{marginTop:16}}><Award size={15}/> Erfolge</div>
         <div className="fw-badge-grid">
-          {badges.map(b => {
-            const I = b.icon;
-            return (
-              <div key={b.name} className={b.got ? "fw-badge got" : "fw-badge"}>
-                <I size={20}/>
-                <span>{b.name}</span>
-              </div>
-            );
-          })}
+          {badges.map(b => <BadgeItem key={b.name} badge={b} size={20} />)}
         </div>
 
         {weekHistory.length > 0 && (
@@ -1931,7 +2037,6 @@ function StatsSection({ weekHistory, goals, stats, sessions }) {
 
       {/* Summary chips */}
       <div className="fw-stats-chips">
-        <div className="fw-stats-chip"><Trophy size={14}/><span>{stats?.xp ?? 0} XP</span></div>
         <div className="fw-stats-chip"><Flame size={14}/><span>{bestStreak} Tage Serie</span></div>
         <div className="fw-stats-chip"><Clock size={14}/><span>{Math.round(totalMinutes/60 * 10)/10} h</span></div>
         <div className="fw-stats-chip"><Check size={14}/><span>{stats?.done ?? 0} Einheiten</span></div>
@@ -1974,15 +2079,15 @@ function StatsSection({ weekHistory, goals, stats, sessions }) {
             const done = (sessions||[]).filter(s => s.goalId === g.id && s.status === "done").length;
             const streak = stats?.streaks?.[g.id] || 0;
             const [c1, c2] = ACCENTS[g.color];
-            const I = TYPES[g.type]?.icon ?? Sparkles;
+            const I = goalIcon(g);
             return (
               <div key={g.id} className="fw-goal-stat-row">
-                <div className="fw-goal-stat-ico" style={{ background:`linear-gradient(135deg,${c1},${c2})` }}><I size={14}/></div>
+                <div className="fw-goal-stat-ico" style={{ background:`${c1}14`, color:c1 }}><I size={14}/></div>
                 <div className="fw-goal-stat-body">
                   <div className="fw-goal-stat-name">{g.name}</div>
                   <div className="fw-goal-stat-sub">{done} erledigt · {streak > 0 ? `${streak} Serie` : "keine aktive Serie"}</div>
                 </div>
-                <div className="fw-goal-stat-xp">{done * g.durationMin} XP</div>
+                <div className="fw-goal-stat-xp">{done}×</div>
               </div>
             );
           })}
@@ -2040,7 +2145,7 @@ function QrSection() {
   return (
     <section className="fw-panel fw-qr-section">
       <div className="fw-section-h"><QrCode size={16}/> App auf anderem Gerät öffnen</div>
-      <p className="fw-qr-lead">Scanne den QR-Code mit deinem Smartphone um FlowWeek direkt zu öffnen und als App zu installieren.</p>
+      <p className="fw-qr-lead">Scanne den QR-Code mit deinem Smartphone um sidequest direkt zu öffnen und als App zu installieren.</p>
       {qrUrl && (
         <div className="fw-qr-wrap">
           <img src={qrUrl} alt="QR Code" className="fw-qr-img" />
@@ -2055,13 +2160,60 @@ function QrSection() {
   );
 }
 
+/* --------------------------------- mood trend ---------------------------------- */
+function MoodTrend({ sessions }) {
+  const withMood = (sessions || []).filter(s => s.status === "done" && s.mood);
+  if (withMood.length < 2) return null;
+
+  const moodVal = { "😴":1, "😐":2, "🙂":3, "💪":4, "🔥":5 };
+  const sorted = [...withMood].sort((a, b) => a.day - b.day);
+  const half = Math.ceil(sorted.length / 2);
+  const older = sorted.slice(0, half);
+  const newer = sorted.slice(-half);
+  const avg = (arr) => arr.reduce((s, x) => s + (moodVal[x.mood] || 3), 0) / arr.length;
+  const oldAvg = avg(older);
+  const newAvg = avg(newer);
+  const diff = newAvg - oldAvg;
+
+  const counts = {};
+  withMood.forEach(s => { counts[s.mood] = (counts[s.mood] || 0) + 1; });
+  const topMoods = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const total = withMood.length;
+
+  const trendLabel = diff > 0.3 ? "Aufwärtstrend" : diff < -0.3 ? "Abwärtstrend" : "Stabil";
+  const trendArrow = diff > 0.3 ? "↗" : diff < -0.3 ? "↘" : "→";
+
+  return (
+    <section className="fw-panel fw-mood-trend">
+      <div className="fw-section-h"><span style={{ fontSize:16 }}>Stimmung</span></div>
+      <div className="fw-mood-trend-row">
+        <div className="fw-mood-trend-arrow">{trendArrow}</div>
+        <div className="fw-mood-trend-info">
+          <div className="fw-mood-trend-label">{trendLabel}</div>
+          <div className="fw-mood-trend-sub">{total} Einträge diese Woche</div>
+        </div>
+      </div>
+      <div className="fw-mood-bars">
+        {topMoods.map(([mood, count]) => (
+          <div key={mood} className="fw-mood-bar-row">
+            <span className="fw-mood-bar-emoji">{mood}</span>
+            <div className="fw-mood-bar-track">
+              <div className="fw-mood-bar-fill" style={{ width:`${(count/total)*100}%` }} />
+            </div>
+            <span className="fw-mood-bar-count">{count}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /* --------------------------------- notes view ---------------------------------- */
 function NotesView({ goals, sessions, goalById, addNote }) {
   const [noteModal, setNoteModal] = useState(null);
   const [openGoal, setOpenGoal] = useState(null);
 
   const noted = (sessions || []).filter(s => s.status === "done");
-  // group by goalId
   const byGoal = {};
   noted.forEach(s => {
     if (!byGoal[s.goalId]) byGoal[s.goalId] = [];
@@ -2072,19 +2224,20 @@ function NotesView({ goals, sessions, goalById, addNote }) {
 
   return (
     <div className="fw-stack">
+      <MoodTrend sessions={sessions} />
       <section className="fw-panel">
         <div className="fw-section-h"><NotebookPen size={16}/> Notizen</div>
         {goals.length === 0 && <div className="fw-day-empty">Noch keine Ziele</div>}
         {goals.map(g => {
           const entries = (byGoal[g.id] || []).sort((a,b) => b.day - a.day);
           const [c1, c2] = ACCENTS[g.color];
-          const I = TYPES[g.type]?.icon ?? Sparkles;
+          const I = goalIcon(g);
           const withNote = entries.filter(s => s.note || s.mood);
           const isOpen = openGoal === g.id;
           return (
             <div key={g.id} className="fw-notes-goal">
               <button className="fw-notes-goal-hdr" onClick={() => setOpenGoal(isOpen ? null : g.id)}>
-                <div className="fw-notes-goal-ico" style={{ background:`linear-gradient(135deg,${c1},${c2})` }}><I size={14}/></div>
+                <div className="fw-notes-goal-ico" style={{ background:`${c1}14`, color:c1 }}><I size={13}/></div>
                 <div className="fw-notes-goal-name">{g.name}</div>
                 <div className="fw-notes-goal-count">{withNote.length} {withNote.length===1?"Notiz":"Notizen"}</div>
                 <div className="fw-notes-goal-arrow">{isOpen ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}</div>
@@ -2138,10 +2291,33 @@ function CollapsiblePanel({ icon, title, children }) {
   );
 }
 
+function DeleteAccountButton({ onDelete }) {
+  const [step, setStep] = useState(0);
+  const [loading, setLoading] = useState(false);
+  if (step === 0) return (
+    <button className="fw-btn danger wide" style={{ marginTop:8 }} onClick={() => setStep(1)}>
+      <Trash2 size={14}/> Konto löschen
+    </button>
+  );
+  return (
+    <div className="fw-delete-confirm">
+      <p>Dein Konto und alle Cloud-Daten werden unwiderruflich gelöscht. Lokale Daten bleiben auf diesem Gerät.</p>
+      <div style={{ display:"flex", gap:8 }}>
+        <button className="fw-btn ghost sm" onClick={() => setStep(0)}>Abbrechen</button>
+        <button className="fw-btn danger sm" disabled={loading} onClick={async () => {
+          setLoading(true); await onDelete(); setStep(0); setLoading(false);
+        }}>
+          {loading ? "…" : "Endgültig löschen"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------- settings -------------------------------- */
 function SettingsView({ availability, setAvailability, pomo, setPomo, dark, setDark,
   notificationsEnabled, setNotificationsEnabled, requestNotifPermission, lang, setLang,
-  user, skippedAuth, handleSkipAuth, reset }) {
+  user, skippedAuth, handleSkipAuth, gamification, setGamification, reset }) {
   const t = useT();
   const [busy, setBusy] = useState({ day:0, start:"9", end:"17", label:"", recurring:true });
   const [editingBusy, setEditingBusy] = useState(null); // index being edited
@@ -2165,7 +2341,8 @@ function SettingsView({ availability, setAvailability, pomo, setPomo, dark, setD
     setAvailability({ ...availability, busy:updated });
     setEditingBusy(null); setBusyEdit(null);
   };
-  const canNotify = typeof window!=="undefined" && "Notification" in window;
+  const isNative = typeof window !== "undefined" && window.Capacitor?.isNativePlatform?.();
+  const canNotify = typeof window!=="undefined" && ("Notification" in window || isNative);
 
   return (
     <div className="fw-stack">
@@ -2289,12 +2466,16 @@ function SettingsView({ availability, setAvailability, pomo, setPomo, dark, setD
             <button className="fw-btn ghost wide" style={{ marginTop:10 }} onClick={()=>signOutUser()}>
               <LogOut size={15}/> {t("signOut")}
             </button>
+            <DeleteAccountButton onDelete={async () => { try { await deleteAccount(); } catch {} reset(); }} />
           </>
         ) : (
           <>
             <div className="fw-day-empty" style={{ marginBottom:10 }}>{t("signInSection")}</div>
             <button className="fw-login-google" onClick={async()=>{ try{await signInGoogle();}catch{}}}>
               <GoogleSvg/> {t("authGoogle")}
+            </button>
+            <button className="fw-login-apple" onClick={async()=>{ try{await signInApple();}catch{}}}>
+              <AppleSvg/> {t("authApple")}
             </button>
           </>
         )}
@@ -2308,8 +2489,19 @@ function SettingsView({ availability, setAvailability, pomo, setPomo, dark, setD
         </div>
       </section>
 
-      {/* QR Code Sync */}
-      <QrSection />
+      {/* Gamification */}
+      <section className="fw-panel">
+        <div className="fw-toggle-row">
+          <div>
+            <div style={{ fontWeight:500, fontSize:14 }}>Gamification</div>
+            <div style={{ color:"var(--muted)", fontSize:12, marginTop:2 }}>XP, Level und Erfolge anzeigen</div>
+          </div>
+          <button className={gamification?"fw-switch on":"fw-switch"} onClick={()=>setGamification(g=>!g)}><i/></button>
+        </div>
+      </section>
+
+      {/* QR Code Sync — nur im Browser zeigen */}
+      {!(typeof window !== "undefined" && window.Capacitor?.isNativePlatform?.()) && <QrSection />}
 
       <button className="fw-btn danger wide" onClick={()=>{ if(confirm(t("resetConfirm"))) reset(); }}>
         <Trash2 size={15}/> {t("resetAll")}
@@ -2322,6 +2514,15 @@ function SettingsView({ availability, setAvailability, pomo, setPomo, dark, setD
           <Mail size={15}/> {t("contactBtn")}
         </a>
       </CollapsiblePanel>
+
+      {/* Rechtliches */}
+      <section className="fw-panel">
+        <div className="fw-section-h"><FileText size={16}/> Rechtliches</div>
+        <div className="fw-legal-links">
+          <a href="#" onClick={e => { e.preventDefault(); window.__showLegal?.("privacy"); }}>Datenschutzerklärung</a>
+          <a href="#" onClick={e => { e.preventDefault(); window.__showLegal?.("terms"); }}>Nutzungsbedingungen</a>
+        </div>
+      </section>
 
       {/* Impressum */}
       <CollapsiblePanel icon={<Info size={16}/>} title={t("impressumTitle")}>
@@ -2374,7 +2575,7 @@ function TimerOverlay({ sess, goal, pomo, onClose, onComplete }) {
       <div className="fw-timer">
         <button className="fw-overlay-close" onClick={onClose}><X size={20}/></button>
         <div className="fw-timer-eyebrow">
-          {goal?.name}{isPomo && <span className={phase==="work"?"fw-phase work":"fw-phase brk"}>{phase==="work" ? t("focusLabel") : t("breakLabel")}</span>}
+          {goal?.name ?? sess.customName ?? "Timer"}{isPomo && <span className={phase==="work"?"fw-phase work":"fw-phase brk"}>{phase==="work" ? t("focusLabel") : t("breakLabel")}</span>}
         </div>
         <Ring value={progress} size={240} stroke={16} from={c1} to={c2}>
           <div className="fw-timer-center">
@@ -2403,129 +2604,137 @@ function TimerOverlay({ sess, goal, pomo, onClose, onComplete }) {
 
 /* --------------------------------- css ----------------------------------- */
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 .fw{
-  --bg1:#fdf7ff; --bg2:#eaeeff; --card:#ffffff; --card2:#f7f5fd;
-  --text:#1d1b2e; --muted:#6f6b86; --line:#ece8f6; --shadow:0 10px 30px rgba(60,40,120,.10);
-  font-family:'Inter',system-ui,sans-serif; color:var(--text);
-  min-height:100vh; background:linear-gradient(165deg,var(--bg1),var(--bg2)); position:relative;
+  --bg1:#FAFAF8; --bg2:#F5F3EE; --card:#ffffff; --card2:#F5F3EE;
+  --text:#1A1A1A; --muted:#999; --line:#E8E6E1; --shadow:none; --accent:#1A1A1A;
+  font-family:'Inter',system-ui,-apple-system,sans-serif; color:var(--text);
+  min-height:100vh; background:var(--bg1); position:relative;
   -webkit-font-smoothing:antialiased;
 }
 .fw-dark{
-  --bg1:#15131f; --bg2:#0c1124; --card:#1c1a2b; --card2:#211e30;
-  --text:#f2f0fb; --muted:#a39fbb; --line:#2c2942; --shadow:0 12px 34px rgba(0,0,0,.5);
+  --bg1:#111; --bg2:#1A1A1A; --card:#1A1A1A; --card2:#222;
+  --text:#F0EDE8; --muted:#777; --line:#2A2A2A; --shadow:none; --accent:#F0EDE8;
 }
 .fw *{box-sizing:border-box}
 .fw-shell{max-width:560px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
-.fw-main{flex:1;padding:14px 16px 92px}
-.fw-stack>*+*{margin-top:14px}
+.fw-main{flex:1;padding:14px 16px calc(env(safe-area-inset-bottom,10px) + 82px)}
+.fw-stack>*+*{margin-top:18px}
 
 /* header */
-.fw-header{display:flex;justify-content:space-between;align-items:center;padding:16px 18px 8px;max-width:560px;margin:0 auto;width:100%}
-.fw-logo{font-family:'Outfit';font-weight:800;font-size:22px;letter-spacing:-.5px}
-.fw-logo span{background:linear-gradient(90deg,#7c5cff,#36c5ff);-webkit-background-clip:text;background-clip:text;color:transparent}
-.fw-logo.big{font-size:34px}
-.fw-sub{color:var(--muted);font-size:12.5px;margin-top:2px}
-.fw-header-right{display:flex;align-items:center;gap:10px}
-.fw-levelpill{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12.5px;background:var(--card);padding:7px 11px;border-radius:999px;box-shadow:var(--shadow);font-family:'Outfit';border:none;cursor:pointer;color:var(--text);transition:.15s}
-.fw-levelpill:hover{box-shadow:0 0 0 2px #7c5cff44;transform:translateY(-1px)}
-.fw-levelpill svg{color:#ffb020}
+.fw-header{display:flex;justify-content:space-between;align-items:center;padding:16px 18px 12px;padding-top:env(safe-area-inset-top,16px);max-width:560px;margin:0 auto;width:100%;border-bottom:.5px solid var(--line)}
+.fw-logo{font-weight:500;font-size:18px;letter-spacing:-.5px;color:var(--text)}
+.fw-logo.big{font-size:28px}
+.fw-header-date{color:var(--muted);font-size:12px}
+.fw-header-right{display:flex;align-items:center;gap:12px}
+.fw-levelpill{font-weight:600;font-size:11px;background:var(--card2);padding:5px 10px;border-radius:6px;border:.5px solid var(--line);cursor:pointer;color:var(--text);transition:.15s;letter-spacing:.3px;text-transform:lowercase}
+.fw-levelpill:hover{border-color:var(--muted)}
 
 /* stats modal */
 .fw-stats-modal{max-height:85vh;overflow-y:auto}
-.fw-stats-modal-hero{text-align:center;padding:16px 0 12px;border-bottom:1px solid var(--line);margin-bottom:14px}
-.fw-stats-modal-trophy{width:64px;height:64px;border-radius:20px;background:linear-gradient(135deg,#ffb020,#ff7c20);display:flex;align-items:center;justify-content:center;color:#fff;margin:0 auto 10px}
-.fw-stats-modal-level{font-size:22px;font-weight:800;font-family:'Outfit'}
+.fw-stats-modal-hero{text-align:center;padding:16px 0 12px;border-bottom:.5px solid var(--line);margin-bottom:14px}
+.fw-stats-modal-trophy{width:56px;height:56px;border-radius:14px;background:var(--card2);border:.5px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--text);margin:0 auto 10px}
+.fw-stats-modal-level{font-size:20px;font-weight:600}
 .fw-stats-modal-xp{font-size:12px;color:var(--muted);margin:4px 0 10px}
-.fw-stats-modal-bar{height:8px;border-radius:999px;background:var(--line);overflow:hidden;width:100%}
-.fw-stats-modal-bar-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#7c5cff,#36c5ff);transition:width .6s}
+.fw-stats-modal-bar{height:4px;border-radius:2px;background:var(--line);overflow:hidden;width:100%}
+.fw-stats-modal-bar-fill{height:100%;border-radius:2px;background:var(--text);transition:width .6s}
 .fw-badge-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
-.fw-xpmini{width:64px}
-.fw-icon-btn{border:none;background:var(--card);width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:var(--text);box-shadow:var(--shadow);cursor:pointer}
+.fw-icon-btn{border:.5px solid var(--line);background:var(--card);width:34px;height:34px;border-radius:8px;display:grid;place-items:center;color:var(--muted);cursor:pointer;transition:.15s}
+.fw-icon-btn:hover{border-color:var(--muted);color:var(--text)}
 
 /* nav */
-.fw-nav{position:fixed;bottom:0;left:0;right:0;max-width:560px;margin:0 auto;background:var(--card);
-  border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:8px 6px 10px;backdrop-filter:blur(8px);z-index:20}
-.fw-navi{flex:1;border:none;background:none;display:flex;flex-direction:column;align-items:center;gap:3px;
-  color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;padding:4px;border-radius:12px;transition:.2s}
-.fw-navi.active{color:#7c5cff}
-.fw-navi.active svg{transform:translateY(-1px)}
+.fw-nav{position:fixed;bottom:0;left:0;right:0;max-width:560px;margin:0 auto;background:var(--bg1);
+  border-top:.5px solid var(--line);display:flex;justify-content:space-around;padding:8px 6px calc(env(safe-area-inset-bottom,10px) + 2px);backdrop-filter:blur(12px);z-index:20}
+.fw-navi{flex:1;border:none;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;
+  color:var(--muted);font-size:10px;font-weight:500;cursor:pointer;padding:8px 4px;border-radius:8px;transition:.2s;min-height:44px;justify-content:center}
+.fw-navi.active{color:var(--text)}
 
 /* hero */
-.fw-hero{background:var(--card);border-radius:24px;padding:22px;box-shadow:var(--shadow);display:flex;gap:18px;align-items:center}
-.fw-hero-center{text-align:center}
-.fw-hero-pct{font-family:'Outfit';font-weight:800;font-size:30px;line-height:1}
-.fw-hero-lbl{color:var(--muted);font-size:12px;margin-top:3px}
-.fw-hero-meta{flex:1;display:flex;flex-direction:column;gap:9px}
-.fw-stat{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600}
-.fw-stat svg{color:#7c5cff}
+.fw-hero{padding:4px 0 8px}
+.fw-greeting{font-size:26px;font-weight:600;letter-spacing:-.5px}
+.fw-greeting-sub{font-size:14px;color:var(--muted);margin-top:6px;line-height:1.4}
+.fw-progress{margin-top:16px}
+.fw-progress-bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;display:flex;gap:2px}
+.fw-progress-fill{height:100%;border-radius:3px;transition:width .6s}
 
-/* next card */
-.fw-next{border-radius:24px;padding:20px;color:#fff;box-shadow:var(--shadow)}
-.fw-next-top{display:flex;justify-content:space-between;align-items:center;opacity:.95}
-.fw-next-eyebrow{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;opacity:.85}
-.fw-next-time{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:600}
-.fw-next-title{font-family:'Outfit';font-weight:800;font-size:25px;display:flex;align-items:center;gap:10px;margin-top:8px}
-.fw-next-meta{opacity:.9;font-size:13.5px;margin-top:2px}
-.fw-next-btns{display:flex;gap:10px;margin-top:16px}
+/* next card — colorful */
+.fw-next{border-radius:18px;padding:20px;color:#fff}
+.fw-next-top{display:flex;align-items:center;gap:14px}
+.fw-next-dot{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex-shrink:0;background:rgba(255,255,255,.2);color:#fff}
+.fw-next-info{flex:1}
+.fw-next-title{font-weight:600;font-size:18px;color:#fff}
+.fw-next-meta{color:rgba(255,255,255,.8);font-size:13px;margin-top:2px}
+.fw-next-btns{display:flex;gap:8px;margin-top:16px}
 
 /* rows */
-.fw-section-h{font-family:'Outfit';font-weight:700;font-size:15px;margin:4px 2px 10px;display:flex;align-items:center;gap:7px}
+.fw-section-h{font-weight:500;font-size:14px;margin:4px 2px 12px;display:flex;align-items:center;gap:7px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
 .fw-section-h.between{justify-content:space-between}
-.fw-section-h svg{color:#7c5cff}
-.fw-row{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:16px;padding:11px 13px;box-shadow:var(--shadow);margin-bottom:9px}
-.fw-row.done{opacity:.58}
-.fw-row-ico{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:#fff;flex-shrink:0}
+.fw-section-h svg{color:var(--muted)}
+.fw-row{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:16px;margin-bottom:10px;color:#fff}
+.fw-row:last-child{margin-bottom:0}
+.fw-row.done{opacity:.6}
+.fw-row-ico{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;flex-shrink:0;background:rgba(255,255,255,.2);color:#fff}
 .fw-row-body{flex:1;min-width:0}
-.fw-row-title{font-weight:700;font-size:14.5px}
-.fw-row-sub{color:var(--muted);font-size:12.5px}
-.fw-row-actions{display:flex;gap:6px}
-.fw-row-check{width:30px;height:30px;border-radius:9px;background:#18c29c;color:#fff;display:grid;place-items:center}
-.fw-mini{border:none;width:32px;height:32px;border-radius:10px;background:var(--card2);color:var(--text);display:grid;place-items:center;cursor:pointer;transition:.15s;text-decoration:none}
-.fw-mini:hover{transform:translateY(-1px)}
-.fw-mini.ok{background:#18c29c;color:#fff}
-.fw-mini.no{background:rgba(255,90,90,.14);color:#ff5a5a}
-.fw-mini.g{background:rgba(124,92,255,.14);color:#7c5cff}
+.fw-row-title{font-weight:600;font-size:15px;color:#fff}
+.fw-row-sub{color:rgba(255,255,255,.75);font-size:12px}
+.fw-row-actions{display:flex;gap:5px}
+.fw-row-check{width:28px;height:28px;border-radius:7px;background:var(--text);color:var(--bg1);display:grid;place-items:center}
+.fw-mini{border:none;width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.25);color:#fff;display:grid;place-items:center;cursor:pointer;transition:.15s;text-decoration:none}
+.fw-mini:hover{background:rgba(255,255,255,.35)}
+.fw-mini.ok{background:rgba(255,255,255,.35);color:#fff}
+.fw-mini.no{background:rgba(255,255,255,.15);color:rgba(255,255,255,.7)}
+.fw-mini.g{background:rgba(255,255,255,.2);color:#fff}
+.fw-mini.note{background:rgba(255,255,255,.2);color:#fff}
 
 /* empty */
-.fw-empty{background:var(--card);border-radius:24px;padding:30px 22px;text-align:center;box-shadow:var(--shadow);display:flex;flex-direction:column;align-items:center;gap:7px}
-.fw-empty svg{color:#7c5cff}
-.fw-empty strong{font-family:'Outfit';font-size:17px}
+.fw-empty{padding:30px 22px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:7px}
+.fw-empty svg{color:var(--muted)}
+.fw-empty strong{font-size:15px;font-weight:500}
 .fw-empty span{color:var(--muted);font-size:13px}
 
 /* week */
 .fw-week-bar{display:flex;justify-content:space-between;align-items:center}
-.fw-suggest-banner{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(124,92,255,.12);border:1px solid rgba(124,92,255,.25);border-radius:16px;padding:11px 14px;font-size:13px;font-weight:600;color:#7c5cff}
+.fw-suggest-banner{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--card2);border:.5px solid var(--line);border-radius:10px;padding:11px 14px;font-size:12px;font-weight:500;color:var(--text)}
 .fw-suggest-banner span{display:flex;align-items:center;gap:7px}
-.fw-day{background:var(--card);border-radius:18px;padding:13px 14px;box-shadow:var(--shadow)}
-.fw-day.today{outline:2px solid rgba(124,92,255,.4)}
-.fw-day-h{display:flex;justify-content:space-between;align-items:center;font-family:'Outfit';font-weight:700;font-size:14px;margin-bottom:9px}
-.fw-day-h em{font-style:normal;font-size:11px;font-weight:700;color:#7c5cff;background:rgba(124,92,255,.12);padding:2px 8px;border-radius:999px}
+.fw-day{background:var(--card);border-radius:12px;padding:13px 14px;border:.5px solid var(--line)}
+.fw-day.today{border-color:var(--text)}
+.fw-day-h{display:flex;justify-content:space-between;align-items:center;font-weight:500;font-size:13px;margin-bottom:9px}
+.fw-day-h em{font-style:normal;font-size:10px;font-weight:500;color:var(--text);background:var(--card2);padding:2px 8px;border-radius:4px}
 .fw-day-empty{color:var(--muted);font-size:12.5px;padding:3px 2px}
-.fw-week-card{display:flex;align-items:center;gap:11px;padding:8px 4px;border-bottom:1px solid var(--line)}
-.fw-week-card:last-child{border-bottom:none}
-.fw-week-card.suggested .fw-wc-title{font-style:italic}
-.fw-wc-ico{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;color:#fff;flex-shrink:0}
+.fw-week-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;margin-bottom:6px;color:#fff}
+.fw-week-card:last-child{margin-bottom:0}
+.fw-week-card.suggested{opacity:.7}
+.fw-wc-ico{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex-shrink:0;background:rgba(255,255,255,.2);color:#fff}
 .fw-wc-body{flex:1;min-width:0}
-.fw-wc-title{font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:5px}
-.fw-wc-title svg{color:#18c29c}
-.fw-wc-sub{color:var(--muted);font-size:12px}
-.fw-wc-actions{display:flex;gap:5px}
+.fw-wc-title{font-weight:500;font-size:14px;display:flex;align-items:center;gap:5px;color:#fff}
+.fw-wc-title svg{color:rgba(255,255,255,.7)}
+.fw-wc-sub{color:rgba(255,255,255,.7);font-size:12px}
+.fw-wc-actions{display:flex;gap:4px}
 
 /* goals */
-.fw-badges .fw-badge-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
-.fw-badge{background:var(--card);border-radius:14px;padding:13px 8px;text-align:center;box-shadow:var(--shadow);opacity:.45;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;font-weight:600}
+.fw-badges .fw-badge-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.fw-badge{background:var(--card2);border-radius:8px;padding:12px 8px;text-align:center;opacity:.4;display:flex;flex-direction:column;align-items:center;gap:5px;font-size:10px;font-weight:500;border:.5px solid var(--line);cursor:pointer;color:var(--text);transition:.15s;width:100%}
+.fw-badge:hover{border-color:var(--muted)}
 .fw-badge svg{color:var(--muted)}
 .fw-badge.got{opacity:1}
-.fw-badge.got svg{color:#ffb020}
-.fw-goal-card{background:var(--card);border-radius:18px;padding:15px;box-shadow:var(--shadow)}
+.fw-badge.got svg{color:var(--text)}
+.fw-badge-popup-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:70;display:grid;place-items:center;padding:20px}
+.fw-badge-popup{background:var(--card);border-radius:24px;padding:28px 24px;box-shadow:var(--shadow);text-align:center;max-width:280px;width:100%;animation:fw-slide-up .2s ease}
+.fw-badge-popup-ico{width:64px;height:64px;border-radius:20px;background:var(--card2);display:grid;place-items:center;margin:0 auto 12px;color:var(--muted)}
+.fw-badge-popup-ico.got{background:linear-gradient(135deg,#ffb020,#ff7c20);color:#fff}
+.fw-badge-popup-name{font-family:'Outfit';font-weight:800;font-size:18px;margin-bottom:6px}
+.fw-badge-popup-desc{font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:10px}
+.fw-badge-popup-status{font-size:12px;font-weight:700}
+.fw-badge-popup-status.unlocked{color:#18c29c}
+.fw-badge-popup-status.locked{color:var(--muted)}
+.fw-goal-card{background:var(--card);border-radius:12px;padding:15px;border:.5px solid var(--line)}
 .fw-goal-top{display:flex;align-items:center;gap:10px}
-.fw-goal-ico{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;color:#fff;flex-shrink:0}
-.fw-goal-name{flex:1;border:none;background:none;font-family:'Outfit';font-weight:700;font-size:16px;color:var(--text);min-width:0;border-bottom:1.5px solid transparent;padding:2px 0}
-.fw-goal-name:focus{outline:none;border-bottom-color:#7c5cff}
-.fw-goal-name.solo{width:100%;border-bottom:1.5px solid var(--line);margin-bottom:12px}
-.fw-goal-streak{display:flex;align-items:center;gap:3px;font-size:12px;font-weight:700;color:#ff7a45}
-.fw-goal-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:13px}
+.fw-goal-ico{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex-shrink:0}
+.fw-goal-name{flex:1;border:none;background:none;font-weight:500;font-size:15px;color:var(--text);min-width:0;border-bottom:.5px solid transparent;padding:2px 0}
+.fw-goal-name:focus{outline:none;border-bottom-color:var(--text)}
+.fw-goal-name.solo{width:100%;border-bottom:.5px solid var(--line);margin-bottom:12px}
+.fw-goal-streak{display:flex;align-items:center;gap:3px;font-size:11px;font-weight:500;color:var(--muted)}
+.fw-goal-grid{display:grid;grid-template-columns:1fr 2fr 1fr;gap:9px;margin-top:13px}
 .fw-goal-grid label,.fw-wake label{display:flex;flex-direction:column;gap:5px;font-size:11.5px;font-weight:600;color:var(--muted)}
 .fw-goal-grid input,.fw-goal-grid select,.fw-wake input{border:1.5px solid var(--line);background:var(--card2);border-radius:10px;padding:8px;font-size:14px;color:var(--text);font-weight:600}
 .fw-goal-grid input:focus,.fw-goal-grid select:focus,.fw-wake input:focus{outline:none;border-color:#7c5cff}
@@ -2534,7 +2743,7 @@ const CSS = `
 .fw-dot.sel{border-color:var(--text);transform:scale(1.12)}
 
 /* settings */
-.fw-panel{background:var(--card);border-radius:18px;padding:15px;box-shadow:var(--shadow)}
+.fw-panel{background:var(--card);border-radius:12px;padding:15px;border:.5px solid var(--line)}
 .fw-wake{display:flex;gap:18px;align-items:flex-end}
 .fw-wake input{width:62px;text-align:center}
 .fw-busy-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:7px 0;border-bottom:1px solid var(--line)}
@@ -2547,10 +2756,10 @@ const CSS = `
 .fw-recurring-label input[type=checkbox]{accent-color:#7c5cff;width:16px;height:16px}
 .fw-recurring-badge{display:inline-flex;align-items:center;margin-right:5px;color:#7c5cff}
 .fw-toggle-row{display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:14px}
-.fw-switch{width:48px;height:28px;border-radius:999px;border:none;background:var(--line);position:relative;cursor:pointer;transition:.2s}
-.fw-switch.on{background:linear-gradient(90deg,#7c5cff,#36c5ff)}
-.fw-switch i{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:999px;background:#fff;transition:.2s}
-.fw-switch.on i{left:23px}
+.fw-switch{width:44px;height:26px;border-radius:999px;border:.5px solid var(--line);background:var(--card2);position:relative;cursor:pointer;transition:.2s}
+.fw-switch.on{background:var(--text);border-color:var(--text)}
+.fw-switch i{position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:999px;background:#fff;transition:.2s}
+.fw-switch.on i{left:20px}
 .fw-foot{text-align:center;color:var(--muted);font-size:11.5px;padding:6px 20px}
 .fw-notif-active{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:#18c29c;background:rgba(24,194,156,.1);border-radius:12px;padding:10px 12px}
 .fw-lang-row{display:flex;gap:10px;margin-top:6px}
@@ -2558,27 +2767,34 @@ const CSS = `
 .fw-lang-btn.active{border-color:#7c5cff;background:rgba(124,92,255,.12);color:#7c5cff}
 .fw-account-row{display:flex;align-items:center;gap:12px}
 .fw-account-avatar{width:40px;height:40px;border-radius:999px;object-fit:cover}
+.fw-delete-confirm{background:rgba(255,90,90,.08);border:1.5px solid rgba(255,90,90,.25);border-radius:14px;padding:14px;margin-top:10px}
+.fw-delete-confirm p{font-size:13px;color:#ff5a5a;line-height:1.5;margin:0 0 12px}
+.fw-legal-links{display:flex;flex-direction:column;gap:8px}
+.fw-legal-links a{color:#7c5cff;font-size:14px;font-weight:600;text-decoration:none;padding:8px 0;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:6px}
+.fw-legal-links a:last-child{border-bottom:none}
+.fw-legal-links a:hover{text-decoration:underline}
 
 /* buttons */
-.fw-btn{border:none;border-radius:13px;padding:11px 16px;font-size:14px;font-weight:700;font-family:'Outfit';cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;transition:.18s}
-.fw-btn:disabled{opacity:.4;cursor:not-allowed}
-.fw-btn:not(:disabled):hover{transform:translateY(-1px)}
-.fw-btn.solid{background:linear-gradient(135deg,#7c5cff,#4f7dff);color:#fff;box-shadow:0 8px 20px rgba(124,92,255,.35)}
-.fw-btn.ghost{background:var(--card);color:var(--text);box-shadow:var(--shadow)}
-.fw-btn.white{background:#fff;color:#1d1b2e}
-.fw-btn.glass{background:rgba(255,255,255,.22);color:#fff;backdrop-filter:blur(4px)}
-.fw-btn.danger{background:rgba(255,90,90,.13);color:#ff5a5a}
+.fw-btn{border:.5px solid var(--line);border-radius:12px;padding:12px 18px;font-size:14px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;transition:.15s;background:var(--card);color:var(--text)}
+.fw-btn:disabled{opacity:.35;cursor:not-allowed}
+.fw-btn:not(:disabled):hover{border-color:var(--muted)}
+.fw-btn.solid{background:var(--text);color:var(--bg1);border-color:var(--text)}
+.fw-btn.solid:not(:disabled):hover{opacity:.85}
+.fw-btn.outline{background:rgba(255,255,255,.2);color:#fff;border:none}
+.fw-btn.outline:hover{background:rgba(255,255,255,.3)}
+.fw-btn.ghost{background:var(--card);color:var(--text)}
+.fw-btn.danger{background:none;border-color:rgba(228,75,74,.3);color:#E24B4A}
 .fw-btn.wide{width:100%}
-.fw-btn.sm{padding:8px 12px;font-size:12.5px}
+.fw-btn.sm{padding:8px 13px;font-size:13px}
 .fw-btn.pulse{animation:fwpulse 1.4s infinite}
 
 /* onboarding */
-.fw-onb{min-height:100vh;display:grid;place-items:center;padding:20px}
-.fw-onb-card{max-width:480px;width:100%;background:var(--card);border-radius:28px;padding:28px 24px;box-shadow:var(--shadow);position:relative;overflow:hidden}
-.fw-onb-glow{position:absolute;top:-60px;right:-60px;width:200px;height:200px;border-radius:999px;background:radial-gradient(circle,#7c5cff44,transparent 70%)}
-.fw-onb-lead{color:var(--muted);font-size:14px;line-height:1.55;margin:10px 0 18px}
-.fw-onb-h{font-family:'Outfit';font-weight:800;font-size:22px;display:flex;align-items:center;gap:9px}
-.fw-onb-h svg{color:#7c5cff}
+.fw-onb{min-height:100vh;display:grid;place-items:center;padding:20px;padding-top:calc(env(safe-area-inset-top,20px) + 10px);background:var(--bg1)}
+.fw-onb-card{max-width:480px;width:100%;background:var(--card);border-radius:16px;padding:28px 24px;border:.5px solid var(--line);position:relative;overflow:hidden}
+.fw-onb-glow{display:none}
+.fw-onb-lead{color:var(--muted);font-size:13px;line-height:1.55;margin:10px 0 18px}
+.fw-onb-h{font-weight:500;font-size:20px;display:flex;align-items:center;gap:9px}
+.fw-onb-h svg{color:var(--muted)}
 .fw-templates{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
 .fw-tmpl{border:1.5px solid var(--line);background:var(--card2);border-radius:15px;padding:13px;cursor:pointer;display:flex;flex-direction:column;gap:4px;color:var(--text);transition:.18s;text-align:left}
 .fw-tmpl svg{margin-bottom:2px}
@@ -2587,21 +2803,21 @@ const CSS = `
 .fw-tmpl:hover{transform:translateY(-2px)}
 .fw-onb-row{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
 
-/* NEW: splash screen */
+/* splash screen */
 .fw-splash-icon-wrap{display:flex;justify-content:center;margin-bottom:12px}
-.fw-splash-icon{width:76px;height:76px;border-radius:24px;background:linear-gradient(135deg,#7c5cff,#36c5ff);display:grid;place-items:center;color:#fff;font-family:'Outfit';font-weight:800;font-size:38px;box-shadow:0 12px 32px rgba(124,92,255,.4)}
-.fw-splash-tagline{font-family:'Outfit';font-weight:800;font-size:30px;line-height:1.18;text-align:center;margin:6px 0 8px;letter-spacing:-.5px}
-.fw-splash-feats{display:flex;flex-direction:column;gap:10px;margin:14px 0 20px}
-.fw-splash-feat{display:flex;align-items:center;gap:12px;background:var(--card2);border-radius:14px;padding:11px 12px}
-.fw-splash-feat-ico{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;color:#fff;flex-shrink:0}
-.fw-splash-feat-title{font-weight:700;font-size:13.5px;margin-bottom:2px}
-.fw-splash-feat-desc{font-size:12px;color:var(--muted)}
+.fw-splash-icon{width:64px;height:64px;border-radius:16px;background:var(--text);display:flex;align-items:center;justify-content:center;color:var(--bg1);font-weight:500;font-size:24px;letter-spacing:-.5px;line-height:1}
+.fw-splash-tagline{font-weight:500;font-size:26px;line-height:1.18;text-align:center;margin:6px 0 8px;letter-spacing:-.5px}
+.fw-splash-feats{display:flex;flex-direction:column;gap:8px;margin:14px 0 20px}
+.fw-splash-feat{display:flex;align-items:center;gap:12px;background:var(--card2);border-radius:10px;padding:10px 12px;border:.5px solid var(--line)}
+.fw-splash-feat-ico{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;color:#fff;flex-shrink:0}
+.fw-splash-feat-title{font-weight:500;font-size:13px;margin-bottom:1px}
+.fw-splash-feat-desc{font-size:11px;color:var(--muted)}
 .fw-splash-hint{text-align:center;color:var(--muted);font-size:12px;margin-top:8px}
 
 /* bottom sheet / modal overlay */
-.fw-sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;align-items:flex-end;justify-content:center}
-.fw-sheet{background:var(--card);border-radius:28px 28px 0 0;width:100%;max-width:560px;padding:12px 20px 32px;display:flex;flex-direction:column;gap:12px}
-.fw-sheet-handle{width:40px;height:4px;border-radius:999px;background:var(--line);margin:0 auto 4px}
+.fw-sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.fw-sheet{background:var(--card);border-radius:16px 16px 0 0;width:100%;max-width:560px;padding:12px 20px 32px;display:flex;flex-direction:column;gap:12px}
+.fw-sheet-handle{width:36px;height:3px;border-radius:999px;background:var(--line);margin:0 auto 4px}
 .fw-sheet-hdr{display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--line)}
 .fw-sheet-hdr-ico{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;color:#fff;flex-shrink:0}
 .fw-sheet-hdr-text{flex:1}
@@ -2624,34 +2840,33 @@ const CSS = `
 .fw-login-divider::before,.fw-login-divider::after{content:'';flex:1;height:1px;background:var(--line)}
 .fw-login-note{text-align:center;color:var(--muted);font-size:11.5px;margin-top:12px}
 
-/* overlay / timer — FIXED: flex column + align center */
-.fw-overlay{position:fixed;inset:0;background:rgba(20,16,40,.55);backdrop-filter:blur(10px);display:grid;place-items:center;z-index:50;padding:20px}
-.fw-timer{background:var(--card);border-radius:30px;padding:30px 26px;box-shadow:var(--shadow);text-align:center;position:relative;max-width:380px;width:100%;display:flex;flex-direction:column;align-items:center}
-.fw-overlay-close{position:absolute;top:16px;right:16px;border:none;background:var(--card2);width:36px;height:36px;border-radius:11px;display:grid;place-items:center;cursor:pointer;color:var(--text)}
-.fw-timer-eyebrow{font-family:'Outfit';font-weight:700;font-size:18px;margin-bottom:18px;display:flex;align-items:center;justify-content:center;gap:9px;width:100%}
-.fw-phase{font-size:11px;padding:3px 9px;border-radius:999px;font-weight:700}
-.fw-phase.work{background:rgba(124,92,255,.15);color:#7c5cff}
-.fw-phase.brk{background:rgba(24,194,156,.15);color:#18c29c}
+/* overlay / timer */
+.fw-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);display:grid;place-items:center;z-index:50;padding:20px}
+.fw-timer{background:var(--card);border-radius:20px;padding:30px 26px;text-align:center;position:relative;max-width:380px;width:100%;display:flex;flex-direction:column;align-items:center;border:.5px solid var(--line)}
+.fw-overlay-close{position:absolute;top:16px;right:16px;border:.5px solid var(--line);background:var(--card);width:32px;height:32px;border-radius:8px;display:grid;place-items:center;cursor:pointer;color:var(--muted)}
+.fw-timer-eyebrow{font-weight:500;font-size:16px;margin-bottom:18px;display:flex;align-items:center;justify-content:center;gap:9px;width:100%}
+.fw-phase{font-size:10px;padding:3px 8px;border-radius:4px;font-weight:500}
+.fw-phase.work{background:var(--card2);color:var(--text)}
+.fw-phase.brk{background:var(--card2);color:var(--muted)}
 .fw-timer-center{text-align:center}
-.fw-timer-time{font-family:'Outfit';font-weight:800;font-size:48px;letter-spacing:-1px;font-variant-numeric:tabular-nums}
+.fw-timer-time{font-weight:500;font-size:48px;letter-spacing:-2px;font-variant-numeric:tabular-nums}
 .fw-timer-sub{color:var(--muted);font-size:13px;margin-top:4px}
 .fw-timer-btns{display:flex;gap:11px;margin-top:24px;justify-content:center;width:100%}
 
 /* replan banner */
-.fw-replan{position:fixed;bottom:84px;left:14px;right:14px;max-width:534px;margin:0 auto;background:var(--card);border-radius:18px;padding:14px 16px;box-shadow:var(--shadow);display:flex;justify-content:space-between;align-items:center;gap:12px;z-index:30;border:1.5px solid rgba(124,92,255,.3)}
-.fw-replan strong{font-family:'Outfit';font-size:14px;display:block}
-.fw-replan span{color:var(--muted);font-size:12.5px}
+.fw-replan{position:fixed;bottom:84px;left:14px;right:14px;max-width:534px;margin:0 auto;background:var(--card);border-radius:12px;padding:14px 16px;border:.5px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;z-index:30}
+.fw-replan strong{font-size:13px;font-weight:500;display:block}
+.fw-replan span{color:var(--muted);font-size:12px}
 .fw-replan-btns{display:flex;gap:8px;flex-shrink:0}
 
 /* toast */
-.fw-toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);background:#1d1b2e;color:#fff;padding:11px 18px;border-radius:13px;font-size:13.5px;font-weight:600;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.3);animation:fwtoast .3s;white-space:nowrap}
-.fw-dark .fw-toast{background:#322e48}
+.fw-toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg1);padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;z-index:60;animation:fwtoast .3s;white-space:nowrap}
 
 /* weekly review */
-.fw-review{background:var(--card);border-radius:30px;padding:28px 24px;box-shadow:var(--shadow);text-align:center;max-width:380px;width:100%}
-.fw-review-badge{width:64px;height:64px;border-radius:20px;display:grid;place-items:center;color:#fff;margin:0 auto 14px}
-.fw-review-week{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px}
-.fw-review-headline{font-family:'Outfit';font-weight:800;font-size:22px;margin-bottom:18px}
+.fw-review{background:var(--card);border-radius:20px;padding:28px 24px;text-align:center;max-width:380px;width:100%;border:.5px solid var(--line)}
+.fw-review-badge{width:56px;height:56px;border-radius:14px;display:grid;place-items:center;color:#fff;margin:0 auto 14px}
+.fw-review-week{font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px}
+.fw-review-headline{font-weight:500;font-size:20px;margin-bottom:18px}
 .fw-review-ring{display:flex;justify-content:center;margin-bottom:18px}
 .fw-review-stats{display:flex;justify-content:center;gap:22px;margin-bottom:16px}
 .fw-review-stat{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600}
@@ -2670,13 +2885,19 @@ const CSS = `
 .fw-stats-count{font-size:10px;color:var(--muted)}
 
 /* plan menu dropdown */
-.fw-plan-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:40;background:var(--card);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);min-width:200px;overflow:hidden;border:1px solid var(--line)}
-.fw-plan-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:12px 16px;background:none;border:none;font-size:14px;color:var(--text);cursor:pointer;text-align:left;transition:.15s}
-.fw-plan-menu button:hover{background:var(--card2);color:#7c5cff}
-.fw-plan-menu button:first-child{border-bottom:1px solid var(--line)}
+.fw-plan-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:40;background:var(--card);border-radius:10px;min-width:200px;overflow:hidden;border:.5px solid var(--line)}
+.fw-plan-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:11px 14px;background:none;border:none;font-size:13px;color:var(--text);cursor:pointer;text-align:left;transition:.15s}
+.fw-plan-menu button:hover{background:var(--card2)}
 .fw-plan-menu-confirm{padding:12px 16px;border-top:1px solid var(--line);font-size:13px;font-weight:600;color:var(--text)}
 .fw-plan-confirm-yes{flex:1;padding:6px 12px;border-radius:8px;border:none;background:linear-gradient(90deg,#7c5cff,#36c5ff);color:#fff;font-size:13px;font-weight:700;cursor:pointer}
 .fw-plan-confirm-no{flex:1;padding:6px 12px;border-radius:8px;border:1.5px solid var(--line);background:none;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer}
+
+/* export dropdown */
+.fw-export-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:40;background:var(--card);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);min-width:200px;overflow:hidden;border:1px solid var(--line)}
+.fw-export-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:12px 16px;background:none;border:none;font-size:14px;color:var(--text);cursor:pointer;text-align:left;transition:.15s}
+.fw-export-menu button:hover{background:var(--card2);color:#7c5cff}
+.fw-export-menu button+button{border-top:.5px solid var(--line)}
+.fw-export-menu button.active{font-weight:500;color:var(--text)}
 
 /* busy time edit row */
 .fw-busy-edit{background:var(--card2);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;margin-bottom:4px}
@@ -2691,11 +2912,11 @@ const CSS = `
 
 /* stats chips + tabs */
 .fw-stats-chips{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
-.fw-stats-chip{display:flex;align-items:center;gap:5px;padding:6px 12px;background:var(--card2);border-radius:999px;font-size:12px;font-weight:700;color:var(--text)}
-.fw-stats-chip svg{color:#7c5cff}
-.fw-stats-tabs{display:flex;gap:0;border:1.5px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:12px}
-.fw-stats-tab{flex:1;border:none;background:none;padding:9px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;transition:.15s}
-.fw-stats-tab.active{background:linear-gradient(90deg,#7c5cff,#36c5ff);color:#fff}
+.fw-stats-chip{display:flex;align-items:center;gap:5px;padding:6px 12px;background:var(--card2);border-radius:6px;font-size:12px;font-weight:500;color:var(--text);border:.5px solid var(--line)}
+.fw-stats-chip svg{color:var(--muted)}
+.fw-stats-tabs{display:flex;gap:0;border:.5px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:12px}
+.fw-stats-tab{flex:1;border:none;background:none;padding:8px;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;transition:.15s}
+.fw-stats-tab.active{background:var(--text);color:var(--bg1)}
 
 /* per-goal stat rows */
 .fw-goal-stat-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
@@ -2714,14 +2935,14 @@ const CSS = `
 .fw-note-area:focus{outline:none;border-color:#7c5cff}
 .fw-mini.note{color:#7c5cff}
 .fw-row-mood{margin-left:6px;font-size:16px}
-.fw-row-note-preview{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+.fw-row-note-preview{font-size:11px;color:rgba(255,255,255,.6);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
 
 /* notes view */
 .fw-notes-goal{border-bottom:1px solid var(--line)}
 .fw-notes-goal:last-child{border-bottom:none}
-.fw-notes-goal-hdr{display:flex;align-items:center;gap:10px;width:100%;border:none;background:none;padding:12px 0;cursor:pointer;text-align:left}
-.fw-notes-goal-ico{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff}
-.fw-notes-goal-name{flex:1;font-size:14px;font-weight:700}
+.fw-notes-goal-hdr{display:flex;align-items:center;gap:10px;width:100%;border:none;background:none;padding:12px 0;cursor:pointer;text-align:left;color:var(--text)}
+.fw-notes-goal-ico{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
+.fw-notes-goal-name{flex:1;font-size:14px;font-weight:500;color:var(--text)}
 .fw-notes-goal-count{font-size:12px;color:var(--muted);white-space:nowrap}
 .fw-notes-goal-arrow{color:var(--muted);flex-shrink:0}
 .fw-notes-entries{display:flex;flex-direction:column;gap:10px;padding:0 0 14px 38px}
@@ -2731,7 +2952,20 @@ const CSS = `
 .fw-note-entry-meta span:first-child{flex:1}
 .fw-note-mood{font-size:16px}
 .fw-note-text{font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap}
-.fw-note-empty-hint{font-size:12px;color:#7c5cff;cursor:pointer;padding:4px 0}
+.fw-note-empty-hint{font-size:12px;color:var(--accent);cursor:pointer;padding:4px 0}
+
+/* mood trend */
+.fw-mood-trend-row{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.fw-mood-trend-arrow{font-size:24px;width:40px;height:40px;border-radius:10px;background:var(--card2);display:grid;place-items:center;flex-shrink:0;border:.5px solid var(--line)}
+.fw-mood-trend-info{flex:1}
+.fw-mood-trend-label{font-size:14px;font-weight:500}
+.fw-mood-trend-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.fw-mood-bars{display:flex;flex-direction:column;gap:8px}
+.fw-mood-bar-row{display:flex;align-items:center;gap:8px}
+.fw-mood-bar-emoji{font-size:18px;width:24px;text-align:center;flex-shrink:0}
+.fw-mood-bar-track{flex:1;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.fw-mood-bar-fill{height:100%;border-radius:3px;background:var(--text);transition:width .4s}
+.fw-mood-bar-count{font-size:11px;color:var(--muted);width:20px;text-align:right;flex-shrink:0}
 
 /* qr section */
 .fw-qr-section{text-align:center}
@@ -2796,7 +3030,7 @@ const CSS = `
 .fw-week-card.dragging{opacity:.4}
 .fw-week-card[draggable=true]{cursor:grab}
 .fw-week-card[draggable=true]:active{cursor:grabbing}
-.fw-drag-handle{color:var(--muted);font-size:14px;margin-right:2px;cursor:grab;user-select:none;line-height:1}
+.fw-drag-handle{color:rgba(255,255,255,.4);font-size:14px;margin-right:2px;cursor:grab;user-select:none;line-height:1}
 .fw-day-add{border:none;background:none;color:var(--muted);cursor:pointer;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;transition:.15s}
 .fw-day-add:hover{background:rgba(124,92,255,.12);color:#7c5cff}
 
