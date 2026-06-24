@@ -9,9 +9,9 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["icon-192.png", "icon-512.png", "apple-touch-icon.png"],
       manifest: {
-        name: "FlowWeek",
-        short_name: "FlowWeek",
-        description: "Plane deine Woche um die Dinge herum, die dir wichtig sind.",
+        name: "sidequest",
+        short_name: "sidequest",
+        description: "Plane deine Woche um die Dinge herum, die dir wichtig sind. XP sammeln, Level aufsteigen.",
         theme_color: "#7c5cff",
         background_color: "#fdf7ff",
         display: "standalone",

@@ -4,7 +4,7 @@ import {
   signInWithPopup, signOut, onAuthStateChanged,
   signInWithEmailAndPassword, createUserWithEmailAndPassword,
 } from "firebase/auth";
-import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+import { getFirestore, doc, getDoc, setDoc, deleteDoc } from "firebase/firestore";
 
 const cfg = {
   apiKey:        import.meta.env.VITE_FIREBASE_API_KEY,
@@ -57,4 +57,11 @@ export async function saveCloud(uid, state) {
   if (!_db || !uid) return;
   try { await setDoc(doc(_db, "users", uid), state); }
   catch { /* offline / permissions */ }
+}
+
+export async function deleteAccount() {
+  const user = _auth?.currentUser;
+  if (!user) return;
+  try { await deleteDoc(doc(_db, "users", user.uid)); } catch { /* ignore */ }
+  await user.delete();
 }

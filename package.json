@@ -1,15 +1,27 @@
 {
-  "name": "flowweek",
+  "name": "sidequest",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:native": "vite build && npx cap sync",
+    "open:ios": "npx cap open ios",
+    "open:android": "npx cap open android",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/ios": "^8.4.1",
+    "@capacitor/keyboard": "^8.0.5",
+    "@capacitor/push-notifications": "^8.1.1",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
     "canvas": "^3.2.3",
     "firebase": "^12.15.0",
     "lucide-react": "^1.21.0",
@@ -26,6 +38,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
+    "typescript": "^6.0.3",
     "vite": "^8.0.12",
     "vite-plugin-pwa": "^1.3.0"
   }

@@ -23,3 +23,14 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Capacitor native builds
+ios/App/Pods
+ios/App/App/public
+ios/App/DerivedData
+android/app/src/main/assets/public
+android/.gradle
+android/app/build
+*.xcworkspace
+*.xcuserdatad
+.env
