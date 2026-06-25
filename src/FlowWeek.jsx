@@ -715,6 +715,7 @@ export default function App() {
 
   /* session actions */
   const completeSession = (sess) => {
+    if (sess.status === "done") return;
     const g = goalById(sess.goalId);
     const sessName = g?.name ?? sess.customName ?? "Einheit";
     setSessions(prev => prev.map(s => s.id === sess.id ? { ...s, status:"done" } : s));
@@ -736,6 +737,7 @@ export default function App() {
   };
 
   const skipSession = (sess) => {
+    if (sess.status === "done" || sess.status === "skipped") return;
     setSessions(prev => prev.map(s => s.id === sess.id ? { ...s, status:"skipped" } : s));
     if (sess.goalId) setStats(prev => ({ ...prev, streaks:{ ...prev.streaks, [sess.goalId]:0 } }));
     const g = goalById(sess.goalId);
