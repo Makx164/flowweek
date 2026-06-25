@@ -9,19 +9,19 @@ import {
   ChevronLeft, ChevronRight, ImageIcon,
   Star, Heart, Music, Coffee, Zap, Bike, Pencil, Leaf, Smile,
   Wind, Mail, Info, ChevronDown, ChevronUp,
-  FileText, QrCode, NotebookPen,
+  FileText, QrCode, NotebookPen, Smartphone,
 } from "lucide-react";
 import QRCode from "qrcode";
-import { fbReady, onAuth, signInGoogle, signInApple, signInEmail, signUpEmail, signOutUser, loadCloud, saveCloud, deleteAccount } from "./firebase.js";
+import { fbReady, onAuth, signInGoogle, signInApple, signInEmail, signUpEmail, signOutUser, loadCloud, saveCloud, deleteAccount, resetPassword } from "./firebase.js";
 
 /* ----------------------------- design tokens ----------------------------- */
 const ACCENTS = {
-  coral:  ["#D85A30", "#D85A30"],
-  violet: ["#534AB7", "#534AB7"],
-  blue:   ["#2E6BC6", "#2E6BC6"],
-  green:  ["#1D9E75", "#1D9E75"],
-  amber:  ["#BA7517", "#BA7517"],
-  pink:   ["#C44D78", "#C44D78"],
+  coral:  ["#E9785A", "#E9785A"],
+  violet: ["#8B7EC8", "#8B7EC8"],
+  blue:   ["#5B8FA8", "#5B8FA8"],
+  green:  ["#7FA08A", "#7FA08A"],
+  amber:  ["#C49A5C", "#C49A5C"],
+  pink:   ["#C47B8E", "#C47B8E"],
 };
 const ACCENT_KEYS = Object.keys(ACCENTS);
 
@@ -35,7 +35,7 @@ const TEMPLATES = [
   { name: "Workout",    type: "sport", color: "coral",  perWeek: 3, durationMin: 45, pref: "evening",   iconId: "dumbbell" },
   { name: "Laufen",     type: "sport", color: "blue",   perWeek: 3, durationMin: 30, pref: "morning",   iconId: "wind" },
   { name: "Lesen",      type: "focus", color: "violet", perWeek: 5, durationMin: 25, pref: "evening",   iconId: "book" },
-  { name: "Lernen",     type: "focus", color: "blue",   perWeek: 4, durationMin: 50, pref: "afternoon", iconId: "brain" },
+  { name: "Lernen",     type: "focus", color: "amber",  perWeek: 4, durationMin: 50, pref: "afternoon", iconId: "brain" },
   { name: "Meditation", type: "habit", color: "green",  perWeek: 7, durationMin: 10, pref: "morning",   iconId: "leaf" },
 ];
 
@@ -114,6 +114,8 @@ const T = {
     notifDisable: "Deaktivieren",
     notifEnable: "Benachrichtigungen aktivieren",
     notifUnsupported: "Nicht unterstützt",
+    notifWebOnly: "In der App verfügbar",
+    notifWebOnlyHint: "Push-Benachrichtigungen sind nur in der sidequest App (iOS & Android) verfügbar.",
     darkMode: "Dunkles Design",
     langTitle: "Sprache",
     accountTitle: "Konto",
@@ -227,6 +229,8 @@ const T = {
     notifDisable: "Disable",
     notifEnable: "Enable notifications",
     notifUnsupported: "Not supported",
+    notifWebOnly: "Available in the app",
+    notifWebOnlyHint: "Push notifications are only available in the sidequest app (iOS & Android).",
     darkMode: "Dark mode",
     langTitle: "Language",
     accountTitle: "Account",
@@ -330,7 +334,7 @@ function formatWeekKey(key) {
   return `${d.getDate()}. ${d.toLocaleDateString("de-DE", { month: "short" })}`;
 }
 const rateColor = (r) =>
-  r >= 0.8 ? "#18c29c, #46d97f" : r >= 0.5 ? "#7c5cff, #4f7dff" : "#ff6b6b, #ff9f45";
+  r >= 0.8 ? "#18c29c, #46d97f" : r >= 0.5 ? "#E9785A, #F2A78C" : "#ff6b6b, #ff9f45";
 
 /* --------------------------- scheduling engine --------------------------- */
 function buildOccupied(sessions, busy, day) {
@@ -586,6 +590,8 @@ export default function App() {
   const [replan, setReplan]                     = useState(null);
   const [gamification, setGamification]         = useState(true);
   const [exportMode, setExportMode]             = useState("google");
+  const [questDetail, setQuestDetail]           = useState(null);
+  const [levelUp, setLevelUp]                   = useState(null);
 
   // Auth
   const [user, setUser]                         = useState(undefined);
@@ -718,7 +724,7 @@ export default function App() {
       const streaks = sess.goalId ? { ...prev.streaks, [sess.goalId]:(prev.streaks[sess.goalId]||0)+1 } : prev.streaks;
       const morningDone = prev.morningDone || sess.start < 720;
       if (gamification) {
-        if (levelFromXp(xp) > prevLevel) { fireCelebrate(); flash(`Level ${levelFromXp(xp)} erreicht!`); }
+        if (levelFromXp(xp) > prevLevel) { setLevelUp({ level:levelFromXp(xp), done:prev.done+1 }); fireCelebrate(); }
         else if (sess.goalId && streaks[sess.goalId] === 3) { fireCelebrate(); flash(`${sessName}: 3er-Serie!`); }
         else flash(`+${Math.max(10, sess.durationMin)} XP für ${sessName}`);
       } else {
@@ -827,6 +833,7 @@ export default function App() {
         {!onboarded ? (
           <Onboarding
             fbReady={fbReady}
+            onBack={window.__goToLanding}
             onDone={(picked, avail) => {
               setGoals(picked); setAvailability(avail);
               const created = planWeek(picked, [], avail);
@@ -838,7 +845,7 @@ export default function App() {
           <div className="fw-shell">
             <AppHeader level={level} xp={stats.xp} dark={dark} setDark={setDark} onLevelClick={() => setStatsOpen(true)} gamification={gamification} />
             <main className="fw-main">
-              {view === "today"    && <TodayView {...{ goals, sessions, stats, level, setActive, completeSession, skipSession, goalById, addNote, gamification, exportMode }} />}
+              {view === "today"    && <TodayView {...{ goals, sessions, stats, level, setActive, completeSession, skipSession, goalById, addNote, gamification, exportMode, setQuestDetail }} />}
               {view === "week"     && <WeekView  {...{ goals, sessions, availability, runPlan, acceptSuggestion, acceptAll, skipSession, rescheduleSession, removeSession, completeSession, setActive, goalById, shiftSess, moveSession, addManualSession, editSession, addNote, exportMode, setExportMode }} />}
               {view === "goals"    && <GoalsView {...{ goals, setGoals, stats, weekHistory, sessions, gamification }} />}
               {view === "notes"    && <NotesView {...{ goals, sessions, goalById, addNote }} />}
@@ -850,6 +857,13 @@ export default function App() {
 
         {statsOpen && gamification && (
           <StatsModal level={level} xp={stats.xp} stats={stats} goals={goals} sessions={sessions} weekHistory={weekHistory} onClose={() => setStatsOpen(false)} />
+        )}
+        {questDetail && (
+          <QuestDetail sess={questDetail.sess} goal={questDetail.goal} stats={stats} gamification={gamification}
+            onClose={() => setQuestDetail(null)} onComplete={completeSession} onSkip={skipSession} onStart={setActive} />
+        )}
+        {levelUp && (
+          <LevelUpScreen level={levelUp.level} done={levelUp.done} onContinue={() => setLevelUp(null)} />
         )}
         {active && (
           <TimerOverlay sess={active} goal={goalById(active.goalId)} pomo={pomo}
@@ -896,33 +910,33 @@ function AppHeader({ level, xp, dark, setDark, onLevelClick, gamification }) {
   );
 }
 function AppNav({ view, setView }) {
-  const t = useT();
-  const items = [
-    { k:"today",    labelKey:"navToday",  icon:Clock },
-    { k:"week",     labelKey:"navWeek",   icon:Calendar },
-    { k:"goals",    labelKey:"navGoals",  icon:Target },
-    { k:"notes",    labelKey:"navNotes",  icon:NotebookPen },
-    { k:"settings", labelKey:"navMore",   icon:Cog },
-  ];
   return (
     <nav className="fw-nav">
-      {items.map(it => {
-        const I = it.icon;
-        return (
-          <button key={it.k} className={view === it.k ? "fw-navi active" : "fw-navi"} onClick={() => setView(it.k)}>
-            <I size={20} /><span>{t(it.labelKey)}</span>
-          </button>
-        );
-      })}
+      <button className={view === "today" ? "fw-navi active" : "fw-navi"} onClick={() => setView("today")}>
+        <span className="fw-navi-emoji">🏠</span>
+      </button>
+      <button className={view === "week" ? "fw-navi active" : "fw-navi"} onClick={() => setView("week")}>
+        <span className="fw-navi-emoji">🗓️</span>
+      </button>
+      <button className="fw-nav-center" onClick={() => setView("week")}>
+        <Plus size={24} />
+      </button>
+      <button className={view === "goals" ? "fw-navi active" : "fw-navi"} onClick={() => setView("goals")}>
+        <span className="fw-navi-emoji">📊</span>
+      </button>
+      <button className={view === "settings" ? "fw-navi active" : "fw-navi"} onClick={() => setView("settings")}>
+        <span className="fw-navi-emoji">👤</span>
+      </button>
     </nav>
   );
 }
 
 /* ------------------------------- onboarding ------------------------------ */
 const FEAT_ICONS = [Calendar, Clock, Trophy, BarChart2];
-const FEAT_COLORS = ["violet", "blue", "amber", "green"];
+const FEAT_COLORS = ["coral", "blue", "amber", "green"];
+const FEAT_EMOJIS = ["🗓️", "⏱️", "⭐", "📊"];
 
-function Onboarding({ onDone, fbReady }) {
+function Onboarding({ onDone, fbReady, onBack }) {
   const t = useT();
   const [step, setStep] = useState(0);
   const [picked, setPicked] = useState(() =>
@@ -945,28 +959,56 @@ function Onboarding({ onDone, fbReady }) {
 
   const handleGoogle = async () => {
     setAuthLoading("google"); setAuthError("");
-    try { await signInGoogle(); }
+    try { await signInGoogle(); setStep(1); }
     catch (e) { if (e.code !== "auth/popup-closed-by-user") setAuthError("Google-Anmeldung fehlgeschlagen."); setAuthLoading(null); }
   };
   const handleApple = async () => {
     setAuthLoading("apple"); setAuthError("");
-    try { await signInApple(); }
+    try { await signInApple(); setStep(1); }
     catch { setAuthError("Apple-Anmeldung fehlgeschlagen."); setAuthLoading(null); }
   };
+  const [showResetHint, setShowResetHint] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+
   const handleEmail = async (e) => {
-    e.preventDefault(); setAuthLoading("email"); setAuthError("");
+    e.preventDefault(); setAuthLoading("email"); setAuthError(""); setShowResetHint(false);
     try {
       if (emailMode === "signin") await signInEmail(email, password);
       else await signUpEmail(email, password);
+      setStep(1);
     } catch (err) {
-      const msg = err.code === "auth/wrong-password" || err.code === "auth/invalid-credential"
-        ? "Falsches Passwort." : err.code === "auth/user-not-found"
-        ? "Kein Konto gefunden. Neu registrieren?"
-        : err.code === "auth/email-already-in-use"
-        ? "E-Mail bereits vergeben."
-        : "Fehler: " + (err.message || err.code);
+      let msg;
+      if (err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
+        msg = "Falsches Passwort.";
+        setShowResetHint(true);
+      } else if (err.code === "auth/user-not-found") {
+        msg = "Kein Konto mit dieser E-Mail gefunden. Wechsel zu Registrieren.";
+      } else if (err.code === "auth/email-already-in-use") {
+        msg = "Diese E-Mail ist bereits registriert. Wechsel zu Anmelden.";
+      } else if (err.code === "auth/weak-password") {
+        msg = "Passwort zu kurz — mindestens 6 Zeichen.";
+      } else if (err.code === "auth/invalid-email") {
+        msg = "Ungültige E-Mail-Adresse.";
+      } else if (err.code === "auth/too-many-requests") {
+        msg = "Zu viele Versuche. Bitte warte einen Moment.";
+      } else {
+        msg = "Fehler: " + (err.message || err.code);
+      }
       setAuthError(msg);
       setAuthLoading(null);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!email) { setAuthError("Bitte gib zuerst deine E-Mail-Adresse ein."); return; }
+    try {
+      await resetPassword(email);
+      setResetSent(true);
+      setAuthError("");
+      setShowResetHint(false);
+    } catch (err) {
+      if (err.code === "auth/user-not-found") setAuthError("Kein Konto mit dieser E-Mail gefunden.");
+      else setAuthError("Fehler beim Senden. Bitte versuche es erneut.");
     }
   };
 
@@ -984,28 +1026,23 @@ function Onboarding({ onDone, fbReady }) {
         {/* Step 0 — Splash + auth */}
         {step === 0 && (
           <>
+            {onBack && <button className="fw-onb-back" onClick={onBack}><ArrowRight size={16} style={{ transform:"rotate(180deg)" }} /> Zurück zur Website</button>}
             <div className="fw-splash-icon-wrap">
               <div className="fw-splash-icon">sq</div>
             </div>
-            <div className="fw-logo big" style={{ textAlign:"center" }}>sidequest</div>
-            <p className="fw-splash-tagline">{t("onbTagline").split("\n").map((line,i) => <span key={i}>{line}<br/></span>)}</p>
+            <div className="fw-logo big serif" style={{ textAlign:"center" }}>sidequest</div>
+            <p className="fw-splash-tagline serif">{t("onbTagline").split("\n").map((line,i) => <span key={i}>{line}<br/></span>)}</p>
             <p className="fw-onb-lead">{t("onbLead")}</p>
             <div className="fw-splash-feats">
-              {t("onbFeat").map((f, i) => {
-                const I = FEAT_ICONS[i];
-                const [c1, c2] = ACCENTS[FEAT_COLORS[i]];
-                return (
+              {t("onbFeat").map((f, i) => (
                   <div key={i} className="fw-splash-feat">
-                    <div className="fw-splash-feat-ico" style={{ background:`linear-gradient(135deg,${c1},${c2})` }}>
-                      <I size={17} />
-                    </div>
+                    <div className="fw-splash-feat-emoji">{FEAT_EMOJIS[i]}</div>
                     <div>
                       <div className="fw-splash-feat-title">{f.title}</div>
                       <div className="fw-splash-feat-desc">{f.desc}</div>
                     </div>
                   </div>
-                );
-              })}
+              ))}
             </div>
 
             {/* Primary CTA */}
@@ -1036,11 +1073,17 @@ function Onboarding({ onDone, fbReady }) {
                     onClick={() => setEmailMode("signup")}>Registrieren</button>
                 </div>
                 {authError && <div className="fw-auth-error">{authError}</div>}
+                {resetSent && <div className="fw-auth-success">Link zum Zurücksetzen wurde an {email} gesendet.</div>}
                 <button type="submit" className="fw-btn solid wide" disabled={authLoading==="email"}>
                   {authLoading==="email" ? "…" : emailMode==="signin" ? "Anmelden" : "Konto erstellen"}
                 </button>
+                {emailMode === "signin" && (
+                  <button type="button" className="fw-reset-link" style={{ marginTop:8 }} onClick={handleResetPassword}>
+                    Passwort vergessen?
+                  </button>
+                )}
                 <button type="button" className="fw-btn ghost wide" style={{ marginTop:6 }}
-                  onClick={() => { setEmailExpanded(false); setAuthError(""); }}>Zurück</button>
+                  onClick={() => { setEmailExpanded(false); setAuthError(""); setShowResetHint(false); setResetSent(false); }}>Zurück</button>
               </form>
             ) : (
               <button className="fw-splash-email-btn" onClick={() => setEmailExpanded(true)}>
@@ -1068,7 +1111,7 @@ function Onboarding({ onDone, fbReady }) {
         {/* Step 1 — Goals */}
         {step === 1 && (
           <>
-            <div className="fw-onb-h"><Target size={22} /> {t("onbGoalsTitle")}</div>
+            <div className="fw-onb-h serif"><Target size={22} /> {t("onbGoalsTitle")}</div>
             <p className="fw-onb-lead">{t("onbGoalsLead")}</p>
             <div className="fw-templates">
               {TEMPLATES.map(tmpl => {
@@ -1117,7 +1160,7 @@ function Onboarding({ onDone, fbReady }) {
         {/* Step 2 — Wake time */}
         {step === 2 && (
           <>
-            <div className="fw-onb-h"><Clock size={22} /> {t("onbWhenTitle")}</div>
+            <div className="fw-onb-h serif"><Clock size={22} /> {t("onbWhenTitle")}</div>
             <p className="fw-onb-lead">{t("onbWhenLead")}</p>
             <div className="fw-wake">
               <label>{t("wakeStart")}
@@ -1141,7 +1184,7 @@ function Onboarding({ onDone, fbReady }) {
         {/* Step 3 — Blocked times + calendar screenshot */}
         {step === 3 && (
           <>
-            <div className="fw-onb-h"><Calendar size={22} /> {t("onbBlockedTitle")}</div>
+            <div className="fw-onb-h serif"><Calendar size={22} /> {t("onbBlockedTitle")}</div>
             <p className="fw-onb-lead">{t("onbBlockedLead")}</p>
 
             {/* Calendar screenshot — subtle helper */}
@@ -1171,7 +1214,7 @@ function Onboarding({ onDone, fbReady }) {
               <div className="fw-busy-list">
                 {busyList.map((b, i) => (
                   <div key={i} className="fw-busy-row">
-                    <span>{b.recurring && <RotateCw size={11} style={{ marginRight:4, color:"#7c5cff" }}/>}
+                    <span>{b.recurring && <RotateCw size={11} style={{ marginRight:4, color:"var(--accent)" }}/>}
                       {t("daysFull")[b.day]} · {minToLabel(b.start)}–{minToLabel(b.end)}
                       {b.label ? ` · ${b.label}` : ""}
                     </span>
@@ -1314,7 +1357,7 @@ function CustomGoalBox({ onAdd }) {
 }
 
 /* -------------------------------- today ---------------------------------- */
-function TodayView({ goals, sessions, stats, level, setActive, completeSession, skipSession, goalById, addNote, gamification, exportMode }) {
+function TodayView({ goals, sessions, stats, level, setActive, completeSession, skipSession, goalById, addNote, gamification, exportMode, setQuestDetail }) {
   const t = useT();
   const di = todayIndex();
   const todays = sessions.filter(s => s.day === di && s.status !== "skipped").sort((a,b) => a.start - b.start);
@@ -1336,7 +1379,7 @@ function TodayView({ goals, sessions, stats, level, setActive, completeSession, 
               {todays.map(s => {
                 const g = goalById(s.goalId);
                 const [c] = ACCENTS[g?.color ?? s.customColor ?? "violet"];
-                return <div key={s.id} className="fw-progress-fill" style={{ flex:1, background: s.status === "done" ? c : "var(--line)", borderRadius:3 }} />;
+                return <div key={s.id} className="fw-progress-fill" style={{ flex:1, background: s.status === "done" ? c : "var(--line)", borderRadius:999 }} />;
               })}
             </div>
           </div>
@@ -1356,7 +1399,8 @@ function TodayView({ goals, sessions, stats, level, setActive, completeSession, 
           <div className="fw-section-h">{t("navToday")}</div>
           {todays.map(s => (
             <SessionRow key={s.id} sess={s} goal={goalById(s.goalId)}
-              onStart={() => setActive(s)} onDone={() => completeSession(s)} onSkip={() => skipSession(s)} addNote={addNote} exportMode={exportMode} />
+              onStart={() => setActive(s)} onDone={() => completeSession(s)} onSkip={() => skipSession(s)} addNote={addNote} exportMode={exportMode}
+              onClick={() => setQuestDetail && setQuestDetail({ sess:s, goal:goalById(s.goalId) })} />
           ))}
         </section>
       )}
@@ -1388,7 +1432,7 @@ function NextCard({ sess, goal, onStart, onDone }) {
   );
 }
 
-function SessionRow({ sess, goal, onStart, onDone, onSkip, compact, addNote, exportMode }) {
+function SessionRow({ sess, goal, onStart, onDone, onSkip, compact, addNote, exportMode, onClick }) {
   const t = useT();
   const [noteOpen, setNoteOpen] = useState(false);
   const name  = goal?.name ?? sess.customName ?? "Einheit";
@@ -1399,9 +1443,9 @@ function SessionRow({ sess, goal, onStart, onDone, onSkip, compact, addNote, exp
   const showTimer = (goal?.hasTimer ?? true) && sess.hasTimer !== false;
   return (
     <>
-      <div className={done ? "fw-row done" : "fw-row"} style={{ background:c1 }}>
-        <div className="fw-row-ico"><I size={16}/></div>
-        <div className="fw-row-body">
+      <div className={done ? "fw-row done" : "fw-row"} style={{ cursor: onClick ? "pointer" : undefined }}>
+        <div className="fw-row-ico" style={{ background:c1, color:"#fff" }} onClick={onClick}><I size={18}/></div>
+        <div className="fw-row-body" onClick={onClick}>
           <div className="fw-row-title">{name}</div>
           <div className="fw-row-sub">{minToLabel(sess.start)} · {sess.durationMin} min
             {done && sess.mood && <span className="fw-row-mood">{sess.mood}</span>}
@@ -1624,10 +1668,9 @@ function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSug
                     draggable={s.status !== "done"}
                     onDragStart={e => handleDragStart(e, s.id)}
                     onDragEnd={() => { setDragId(null); setDragOver(null); }}
-                    className={["fw-week-card", suggested && "suggested", isDragging && "dragging"].filter(Boolean).join(" ")}
-                    style={{ background:c1 }}>
+                    className={["fw-week-card", suggested && "suggested", isDragging && "dragging"].filter(Boolean).join(" ")}>
                     <div className="fw-drag-handle" aria-hidden>⠿</div>
-                    <div className="fw-wc-ico"><I size={14}/></div>
+                    <div className="fw-wc-ico" style={{ background:c1 }}><I size={14}/></div>
                     <div className="fw-wc-body">
                       <div className="fw-wc-title">{name}{s.status==="done"&&<Check size={14}/>}</div>
                       <div className="fw-wc-sub">{minToLabel(s.start)} · {s.durationMin} min</div>
@@ -2423,17 +2466,27 @@ function SettingsView({ availability, setAvailability, pomo, setPomo, dark, setD
       <section className="fw-panel">
         <div className="fw-section-h"><Bell size={16}/> {t("notifTitle")}</div>
         <p style={{ color:"var(--muted)", fontSize:13, margin:"0 0 12px" }}>{t("notifHint")}</p>
-        {notificationsEnabled ? (
-          <div className="fw-notif-active">
-            <Bell size={15}/> {t("notifActive")}
-            <button className="fw-btn ghost sm" style={{ marginLeft:"auto" }} onClick={()=>setNotificationsEnabled(false)}>
-              <BellOff size={14}/> {t("notifDisable")}
+        {isNative ? (
+          notificationsEnabled ? (
+            <div className="fw-notif-active">
+              <Bell size={15}/> {t("notifActive")}
+              <button className="fw-btn ghost sm" style={{ marginLeft:"auto" }} onClick={()=>setNotificationsEnabled(false)}>
+                <BellOff size={14}/> {t("notifDisable")}
+              </button>
+            </div>
+          ) : (
+            <button className="fw-btn solid wide" onClick={requestNotifPermission}>
+              <Bell size={16}/> {t("notifEnable")}
             </button>
-          </div>
+          )
         ) : (
-          <button className="fw-btn solid wide" onClick={requestNotifPermission} disabled={!canNotify}>
-            <Bell size={16}/> {canNotify ? t("notifEnable") : t("notifUnsupported")}
-          </button>
+          <div className="fw-notif-web-hint">
+            <Smartphone size={16}/>
+            <div>
+              <div style={{ fontWeight:600, fontSize:14 }}>{t("notifWebOnly")}</div>
+              <div style={{ color:"var(--muted)", fontSize:12, marginTop:2 }}>{t("notifWebOnlyHint")}</div>
+            </div>
+          </div>
         )}
       </section>
 
@@ -2534,6 +2587,74 @@ function SettingsView({ availability, setAvailability, pomo, setPomo, dark, setD
   );
 }
 
+/* ------------------------------ quest detail ------------------------------ */
+function QuestDetail({ sess, goal, onClose, onComplete, onSkip, onStart, gamification, stats }) {
+  const t = useT();
+  const name = goal?.name ?? sess.customName ?? "Einheit";
+  const color = goal?.color ?? sess.customColor ?? "coral";
+  const [c1] = ACCENTS[color];
+  const I = goal ? goalIcon(goal) : (sess.customIconId ? iconById(sess.customIconId) : Sparkles);
+  const streak = goal ? (stats?.streaks?.[goal.id] || 0) : 0;
+  const done = sess.status === "done";
+  const xpAmount = Math.max(10, sess.durationMin);
+  return (
+    <div className="fw-overlay">
+      <div className="fw-quest-detail">
+        <div className="fw-qd-hero" style={{ background:`radial-gradient(circle at 30% 25%, ${c1}cc, ${c1})` }}>
+          <button className="fw-qd-back" onClick={onClose}><ArrowRight size={18} style={{ transform:"rotate(180deg)" }} /></button>
+          <div className="fw-qd-emoji"><I size={48} /></div>
+          {gamification && <div className="fw-qd-xp-pill">+{xpAmount} XP</div>}
+          <div className="fw-qd-title serif">{name}</div>
+        </div>
+        <div className="fw-qd-body">
+          <div className="fw-qd-meta">
+            <div><div className="fw-qd-meta-label">WANN</div><div className="fw-qd-meta-value">{t("daysFull")[sess.day]} · {minToLabel(sess.start)}</div></div>
+            <div><div className="fw-qd-meta-label">DAUER</div><div className="fw-qd-meta-value">{sess.durationMin} Min</div></div>
+            {gamification && streak > 0 && <div><div className="fw-qd-meta-label">STREAK</div><div className="fw-qd-meta-value" style={{ color:"var(--accent)" }}>🔥 {streak} Tage</div></div>}
+          </div>
+          {goal?.desc && <p className="fw-qd-desc">{goal.desc}</p>}
+          {!done && (
+            <>
+              <button className="fw-btn solid wide" style={{ marginTop:"auto" }} onClick={() => { onComplete(sess); onClose(); }}>
+                Als erledigt markieren ✓
+              </button>
+              <button className="fw-qd-secondary" onClick={() => { onSkip(sess); onClose(); }}>Verschieben</button>
+            </>
+          )}
+          {done && <div className="fw-qd-done-badge">✓ Erledigt</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------ level up --------------------------------- */
+function LevelUpScreen({ level, done, onContinue }) {
+  return (
+    <div className="fw-overlay">
+      <div className="fw-levelup">
+        <div className="fw-levelup-sparkle" style={{ top:90, left:50 }}>✨</div>
+        <div className="fw-levelup-sparkle" style={{ top:150, right:46 }}>✨</div>
+        <div className="fw-levelup-sparkle" style={{ bottom:200, left:60 }}>⭐</div>
+        <div className="fw-levelup-ring">
+          <div className="fw-levelup-circle">
+            <span className="fw-levelup-num serif">{level}</span>
+          </div>
+        </div>
+        <div className="fw-levelup-label">LEVEL UP</div>
+        <div className="fw-levelup-title serif">Du bist im<br/>Flow!</div>
+        <div className="fw-levelup-sub">{done} Quests diese Woche. Eine neue Auszeichnung wartet auf dich.</div>
+        <div className="fw-levelup-badges">
+          <div className="fw-levelup-badge">🏅</div>
+          <div className="fw-levelup-badge">🌿</div>
+          <div className="fw-levelup-badge locked">🔒</div>
+        </div>
+        <button className="fw-btn ghost wide" style={{ marginTop:30 }} onClick={onContinue}>Weiter</button>
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------- timer ----------------------------------- */
 function TimerOverlay({ sess, goal, pomo, onClose, onComplete }) {
   const t = useT();
@@ -2604,31 +2725,32 @@ function TimerOverlay({ sess, goal, pomo, onClose, onComplete }) {
 
 /* --------------------------------- css ----------------------------------- */
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Newsreader:wght@400;500;600&display=swap');
 .fw{
-  --bg1:#FAFAF8; --bg2:#F5F3EE; --card:#ffffff; --card2:#F5F3EE;
-  --text:#1A1A1A; --muted:#999; --line:#E8E6E1; --shadow:none; --accent:#1A1A1A;
-  font-family:'Inter',system-ui,-apple-system,sans-serif; color:var(--text);
+  --bg1:#FBF6EE; --bg2:#EFE5D7; --card:#ffffff; --card2:#EFE5D7;
+  --text:#2A2420; --muted:#9a8d7e; --line:#e3d9cc; --shadow:0 2px 10px -4px rgba(60,40,30,.18); --accent:#E9785A; --sage:#7FA08A;
+  font-family:'DM Sans',system-ui,-apple-system,sans-serif; color:var(--text);
   min-height:100vh; background:var(--bg1); position:relative;
   -webkit-font-smoothing:antialiased;
 }
 .fw-dark{
-  --bg1:#111; --bg2:#1A1A1A; --card:#1A1A1A; --card2:#222;
-  --text:#F0EDE8; --muted:#777; --line:#2A2A2A; --shadow:none; --accent:#F0EDE8;
+  --bg1:#1a1714; --bg2:#252019; --card:#252019; --card2:#302a22;
+  --text:#F0EDE8; --muted:#9a8d7e; --line:#3a332b; --shadow:0 2px 10px -4px rgba(0,0,0,.4); --accent:#E9785A; --sage:#7FA08A;
 }
+.fw .serif{font-family:'Newsreader',Georgia,serif}
 .fw *{box-sizing:border-box}
 .fw-shell{max-width:560px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
 .fw-main{flex:1;padding:14px 16px calc(env(safe-area-inset-bottom,10px) + 82px)}
 .fw-stack>*+*{margin-top:18px}
 
 /* header */
-.fw-header{display:flex;justify-content:space-between;align-items:center;padding:16px 18px 12px;padding-top:env(safe-area-inset-top,16px);max-width:560px;margin:0 auto;width:100%;border-bottom:.5px solid var(--line)}
-.fw-logo{font-weight:500;font-size:18px;letter-spacing:-.5px;color:var(--text)}
-.fw-logo.big{font-size:28px}
-.fw-header-date{color:var(--muted);font-size:12px}
+.fw-header{display:flex;justify-content:space-between;align-items:center;padding:16px 22px 14px;padding-top:env(safe-area-inset-top,16px);max-width:560px;margin:0 auto;width:100%}
+.fw-logo{font-family:'Newsreader',Georgia,serif;font-weight:400;font-size:22px;letter-spacing:-.02em;color:var(--text)}
+.fw-logo.big{font-size:32px}
+.fw-header-date{color:var(--muted);font-size:12px;font-weight:500}
 .fw-header-right{display:flex;align-items:center;gap:12px}
-.fw-levelpill{font-weight:600;font-size:11px;background:var(--card2);padding:5px 10px;border-radius:6px;border:.5px solid var(--line);cursor:pointer;color:var(--text);transition:.15s;letter-spacing:.3px;text-transform:lowercase}
-.fw-levelpill:hover{border-color:var(--muted)}
+.fw-levelpill{font-weight:700;font-size:13px;background:var(--card);padding:8px 14px;border-radius:999px;box-shadow:var(--shadow);cursor:pointer;color:var(--accent);transition:.15s;border:none;display:flex;align-items:center;gap:6px}
+.fw-levelpill:hover{transform:translateY(-1px)}
 
 /* stats modal */
 .fw-stats-modal{max-height:85vh;overflow-y:auto}
@@ -2639,52 +2761,52 @@ const CSS = `
 .fw-stats-modal-bar{height:4px;border-radius:2px;background:var(--line);overflow:hidden;width:100%}
 .fw-stats-modal-bar-fill{height:100%;border-radius:2px;background:var(--text);transition:width .6s}
 .fw-badge-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
-.fw-icon-btn{border:.5px solid var(--line);background:var(--card);width:34px;height:34px;border-radius:8px;display:grid;place-items:center;color:var(--muted);cursor:pointer;transition:.15s}
-.fw-icon-btn:hover{border-color:var(--muted);color:var(--text)}
+.fw-icon-btn{border:none;background:var(--card);width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:var(--muted);cursor:pointer;transition:.15s;box-shadow:var(--shadow)}
+.fw-icon-btn:hover{color:var(--text)}
 
 /* nav */
 .fw-nav{position:fixed;bottom:0;left:0;right:0;max-width:560px;margin:0 auto;background:var(--bg1);
-  border-top:.5px solid var(--line);display:flex;justify-content:space-around;padding:8px 6px calc(env(safe-area-inset-bottom,10px) + 2px);backdrop-filter:blur(12px);z-index:20}
-.fw-navi{flex:1;border:none;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;
-  color:var(--muted);font-size:10px;font-weight:500;cursor:pointer;padding:8px 4px;border-radius:8px;transition:.2s;min-height:44px;justify-content:center}
-.fw-navi.active{color:var(--text)}
+  display:flex;justify-content:space-around;padding:10px 6px calc(env(safe-area-inset-bottom,10px) + 4px);backdrop-filter:blur(12px);z-index:20}
+.fw-navi{flex:1;border:none;background:none;display:flex;flex-direction:column;align-items:center;gap:3px;
+  color:var(--muted);font-size:11px;font-weight:500;cursor:pointer;padding:8px 4px;border-radius:12px;transition:.2s;min-height:48px;justify-content:center}
+.fw-navi.active{color:var(--accent)}
 
 /* hero */
-.fw-hero{padding:4px 0 8px}
-.fw-greeting{font-size:26px;font-weight:600;letter-spacing:-.5px}
-.fw-greeting-sub{font-size:14px;color:var(--muted);margin-top:6px;line-height:1.4}
-.fw-progress{margin-top:16px}
-.fw-progress-bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;display:flex;gap:2px}
-.fw-progress-fill{height:100%;border-radius:3px;transition:width .6s}
+.fw-hero{padding:6px 0 10px}
+.fw-greeting{font-family:'Newsreader',Georgia,serif;font-size:32px;font-weight:400;letter-spacing:-.02em;color:var(--text)}
+.fw-greeting-sub{font-size:15px;color:var(--muted);margin-top:8px;line-height:1.5}
+.fw-progress{margin-top:18px}
+.fw-progress-bar{height:8px;border-radius:999px;background:var(--bg2);overflow:hidden;display:flex;gap:3px}
+.fw-progress-fill{height:100%;border-radius:999px;transition:width .6s}
 
-/* next card — colorful */
-.fw-next{border-radius:18px;padding:20px;color:#fff}
+/* next card */
+.fw-next{border-radius:28px;padding:22px;color:#fff}
 .fw-next-top{display:flex;align-items:center;gap:14px}
-.fw-next-dot{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex-shrink:0;background:rgba(255,255,255,.2);color:#fff}
+.fw-next-dot{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;background:rgba(255,255,255,.25);color:#fff}
 .fw-next-info{flex:1}
-.fw-next-title{font-weight:600;font-size:18px;color:#fff}
-.fw-next-meta{color:rgba(255,255,255,.8);font-size:13px;margin-top:2px}
-.fw-next-btns{display:flex;gap:8px;margin-top:16px}
+.fw-next-title{font-family:'Newsreader',Georgia,serif;font-weight:400;font-size:22px;color:#fff}
+.fw-next-meta{color:rgba(255,255,255,.8);font-size:13px;margin-top:3px}
+.fw-next-btns{display:flex;gap:10px;margin-top:18px}
 
 /* rows */
-.fw-section-h{font-weight:500;font-size:14px;margin:4px 2px 12px;display:flex;align-items:center;gap:7px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.fw-section-h{font-weight:600;font-size:13px;margin:4px 2px 14px;display:flex;align-items:center;gap:7px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em}
 .fw-section-h.between{justify-content:space-between}
 .fw-section-h svg{color:var(--muted)}
-.fw-row{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:16px;margin-bottom:10px;color:#fff}
+.fw-row{display:flex;align-items:center;gap:14px;padding:16px 18px;border-radius:28px;margin-bottom:10px;background:var(--card);box-shadow:var(--shadow)}
 .fw-row:last-child{margin-bottom:0}
-.fw-row.done{opacity:.6}
-.fw-row-ico{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;flex-shrink:0;background:rgba(255,255,255,.2);color:#fff}
+.fw-row.done{opacity:.55}
+.fw-row-ico{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;flex-shrink:0}
 .fw-row-body{flex:1;min-width:0}
-.fw-row-title{font-weight:600;font-size:15px;color:#fff}
-.fw-row-sub{color:rgba(255,255,255,.75);font-size:12px}
+.fw-row-title{font-weight:600;font-size:15px;color:var(--text)}
+.fw-row-sub{color:var(--muted);font-size:12px}
 .fw-row-actions{display:flex;gap:5px}
 .fw-row-check{width:28px;height:28px;border-radius:7px;background:var(--text);color:var(--bg1);display:grid;place-items:center}
-.fw-mini{border:none;width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.25);color:#fff;display:grid;place-items:center;cursor:pointer;transition:.15s;text-decoration:none}
-.fw-mini:hover{background:rgba(255,255,255,.35)}
-.fw-mini.ok{background:rgba(255,255,255,.35);color:#fff}
-.fw-mini.no{background:rgba(255,255,255,.15);color:rgba(255,255,255,.7)}
-.fw-mini.g{background:rgba(255,255,255,.2);color:#fff}
-.fw-mini.note{background:rgba(255,255,255,.2);color:#fff}
+.fw-mini{border:none;width:36px;height:36px;border-radius:50%;background:var(--bg2);color:var(--text);display:grid;place-items:center;cursor:pointer;transition:.15s;text-decoration:none}
+.fw-mini:hover{background:var(--line)}
+.fw-mini.ok{background:var(--text);color:var(--bg1)}
+.fw-mini.no{background:rgba(233,120,90,.12);color:var(--accent)}
+.fw-mini.g{background:var(--bg2);color:var(--accent)}
+.fw-mini.note{background:var(--bg2);color:var(--muted)}
 
 /* empty */
 .fw-empty{padding:30px 22px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:7px}
@@ -2696,19 +2818,19 @@ const CSS = `
 .fw-week-bar{display:flex;justify-content:space-between;align-items:center}
 .fw-suggest-banner{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--card2);border:.5px solid var(--line);border-radius:10px;padding:11px 14px;font-size:12px;font-weight:500;color:var(--text)}
 .fw-suggest-banner span{display:flex;align-items:center;gap:7px}
-.fw-day{background:var(--card);border-radius:12px;padding:13px 14px;border:.5px solid var(--line)}
-.fw-day.today{border-color:var(--text)}
-.fw-day-h{display:flex;justify-content:space-between;align-items:center;font-weight:500;font-size:13px;margin-bottom:9px}
-.fw-day-h em{font-style:normal;font-size:10px;font-weight:500;color:var(--text);background:var(--card2);padding:2px 8px;border-radius:4px}
+.fw-day{background:transparent;border-radius:0;padding:0 0 16px;border-bottom:1px solid var(--line)}
+.fw-day.today .fw-day-h span{color:var(--accent)}
+.fw-day-h{display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:14px;margin-bottom:10px}
+.fw-day-h em{font-style:normal;font-size:11px;font-weight:600;color:var(--accent);background:rgba(233,120,90,.1);padding:4px 10px;border-radius:999px}
 .fw-day-empty{color:var(--muted);font-size:12.5px;padding:3px 2px}
-.fw-week-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;margin-bottom:6px;color:#fff}
+.fw-week-card{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:28px;margin-bottom:8px;background:var(--card);box-shadow:var(--shadow)}
 .fw-week-card:last-child{margin-bottom:0}
-.fw-week-card.suggested{opacity:.7}
-.fw-wc-ico{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex-shrink:0;background:rgba(255,255,255,.2);color:#fff}
+.fw-week-card.suggested{opacity:.65}
+.fw-wc-ico{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;color:#fff}
 .fw-wc-body{flex:1;min-width:0}
-.fw-wc-title{font-weight:500;font-size:14px;display:flex;align-items:center;gap:5px;color:#fff}
-.fw-wc-title svg{color:rgba(255,255,255,.7)}
-.fw-wc-sub{color:rgba(255,255,255,.7);font-size:12px}
+.fw-wc-title{font-weight:600;font-size:14px;display:flex;align-items:center;gap:5px;color:var(--text)}
+.fw-wc-title svg{color:var(--sage)}
+.fw-wc-sub{color:var(--muted);font-size:12px}
 .fw-wc-actions{display:flex;gap:4px}
 
 /* goals */
@@ -2718,32 +2840,32 @@ const CSS = `
 .fw-badge svg{color:var(--muted)}
 .fw-badge.got{opacity:1}
 .fw-badge.got svg{color:var(--text)}
-.fw-badge-popup-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:70;display:grid;place-items:center;padding:20px}
-.fw-badge-popup{background:var(--card);border-radius:24px;padding:28px 24px;box-shadow:var(--shadow);text-align:center;max-width:280px;width:100%;animation:fw-slide-up .2s ease}
-.fw-badge-popup-ico{width:64px;height:64px;border-radius:20px;background:var(--card2);display:grid;place-items:center;margin:0 auto 12px;color:var(--muted)}
-.fw-badge-popup-ico.got{background:linear-gradient(135deg,#ffb020,#ff7c20);color:#fff}
+.fw-badge-popup-bg{position:fixed;inset:0;background:rgba(42,36,32,.45);z-index:70;display:grid;place-items:center;padding:20px}
+.fw-badge-popup{background:var(--bg1);border-radius:28px;padding:30px 26px;box-shadow:0 20px 50px -15px rgba(42,36,32,.4);text-align:center;max-width:280px;width:100%;animation:fw-slide-up .2s ease}
+.fw-badge-popup-ico{width:68px;height:68px;border-radius:50%;background:var(--bg2);display:grid;place-items:center;margin:0 auto 14px;color:var(--muted)}
+.fw-badge-popup-ico.got{background:var(--accent);color:#fff}
 .fw-badge-popup-name{font-family:'Outfit';font-weight:800;font-size:18px;margin-bottom:6px}
 .fw-badge-popup-desc{font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:10px}
 .fw-badge-popup-status{font-size:12px;font-weight:700}
 .fw-badge-popup-status.unlocked{color:#18c29c}
 .fw-badge-popup-status.locked{color:var(--muted)}
-.fw-goal-card{background:var(--card);border-radius:12px;padding:15px;border:.5px solid var(--line)}
+.fw-goal-card{background:var(--card);border-radius:28px;padding:20px;box-shadow:var(--shadow)}
 .fw-goal-top{display:flex;align-items:center;gap:10px}
 .fw-goal-ico{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex-shrink:0}
 .fw-goal-name{flex:1;border:none;background:none;font-weight:500;font-size:15px;color:var(--text);min-width:0;border-bottom:.5px solid transparent;padding:2px 0}
 .fw-goal-name:focus{outline:none;border-bottom-color:var(--text)}
 .fw-goal-name.solo{width:100%;border-bottom:.5px solid var(--line);margin-bottom:12px}
 .fw-goal-streak{display:flex;align-items:center;gap:3px;font-size:11px;font-weight:500;color:var(--muted)}
-.fw-goal-grid{display:grid;grid-template-columns:1fr 2fr 1fr;gap:9px;margin-top:13px}
+.fw-goal-grid{display:grid;grid-template-columns:60px 1fr 90px;gap:8px;margin-top:13px}
 .fw-goal-grid label,.fw-wake label{display:flex;flex-direction:column;gap:5px;font-size:11.5px;font-weight:600;color:var(--muted)}
 .fw-goal-grid input,.fw-goal-grid select,.fw-wake input{border:1.5px solid var(--line);background:var(--card2);border-radius:10px;padding:8px;font-size:14px;color:var(--text);font-weight:600}
-.fw-goal-grid input:focus,.fw-goal-grid select:focus,.fw-wake input:focus{outline:none;border-color:#7c5cff}
+.fw-goal-grid input:focus,.fw-goal-grid select:focus,.fw-wake input:focus{outline:none;border-color:var(--accent)}
 .fw-goal-colors{display:flex;gap:8px;margin-top:13px}
-.fw-dot{width:26px;height:26px;border-radius:999px;border:2px solid transparent;cursor:pointer;padding:0}
+.fw-dot{width:24px;height:24px;border-radius:999px;border:2px solid transparent;cursor:pointer;padding:0;flex-shrink:0}
 .fw-dot.sel{border-color:var(--text);transform:scale(1.12)}
 
 /* settings */
-.fw-panel{background:var(--card);border-radius:12px;padding:15px;border:.5px solid var(--line)}
+.fw-panel{background:var(--card);border-radius:28px;padding:20px;box-shadow:var(--shadow)}
 .fw-wake{display:flex;gap:18px;align-items:flex-end}
 .fw-wake input{width:62px;text-align:center}
 .fw-busy-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:7px 0;border-bottom:1px solid var(--line)}
@@ -2753,48 +2875,50 @@ const CSS = `
 .fw-busy-add input:not([type]){flex:1;min-width:80px}
 .fw-busy-recurring{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
 .fw-recurring-label{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}
-.fw-recurring-label input[type=checkbox]{accent-color:#7c5cff;width:16px;height:16px}
-.fw-recurring-badge{display:inline-flex;align-items:center;margin-right:5px;color:#7c5cff}
+.fw-recurring-label input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px}
+.fw-recurring-badge{display:inline-flex;align-items:center;margin-right:5px;color:var(--accent)}
 .fw-toggle-row{display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:14px}
-.fw-switch{width:44px;height:26px;border-radius:999px;border:.5px solid var(--line);background:var(--card2);position:relative;cursor:pointer;transition:.2s}
-.fw-switch.on{background:var(--text);border-color:var(--text)}
-.fw-switch i{position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:999px;background:#fff;transition:.2s}
-.fw-switch.on i{left:20px}
+.fw-switch{width:52px;height:30px;border-radius:999px;border:none;background:var(--bg2);position:relative;cursor:pointer;transition:.2s}
+.fw-switch.on{background:var(--sage)}
+.fw-switch i{position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:999px;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.fw-switch.on i{left:25px}
 .fw-foot{text-align:center;color:var(--muted);font-size:11.5px;padding:6px 20px}
 .fw-notif-active{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:#18c29c;background:rgba(24,194,156,.1);border-radius:12px;padding:10px 12px}
+.fw-notif-web-hint{display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--muted);background:var(--surface);border-radius:12px;padding:12px 14px}
 .fw-lang-row{display:flex;gap:10px;margin-top:6px}
 .fw-lang-btn{flex:1;border:1.5px solid var(--line);background:var(--card2);border-radius:12px;padding:10px;font-size:13.5px;font-weight:700;cursor:pointer;color:var(--text);transition:.15s}
-.fw-lang-btn.active{border-color:#7c5cff;background:rgba(124,92,255,.12);color:#7c5cff}
+.fw-lang-btn.active{border-color:var(--accent);background:rgba(124,92,255,.12);color:var(--accent)}
 .fw-account-row{display:flex;align-items:center;gap:12px}
 .fw-account-avatar{width:40px;height:40px;border-radius:999px;object-fit:cover}
 .fw-delete-confirm{background:rgba(255,90,90,.08);border:1.5px solid rgba(255,90,90,.25);border-radius:14px;padding:14px;margin-top:10px}
 .fw-delete-confirm p{font-size:13px;color:#ff5a5a;line-height:1.5;margin:0 0 12px}
 .fw-legal-links{display:flex;flex-direction:column;gap:8px}
-.fw-legal-links a{color:#7c5cff;font-size:14px;font-weight:600;text-decoration:none;padding:8px 0;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:6px}
+.fw-legal-links a{color:var(--accent);font-size:14px;font-weight:600;text-decoration:none;padding:8px 0;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:6px}
 .fw-legal-links a:last-child{border-bottom:none}
 .fw-legal-links a:hover{text-decoration:underline}
 
 /* buttons */
-.fw-btn{border:.5px solid var(--line);border-radius:12px;padding:12px 18px;font-size:14px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;transition:.15s;background:var(--card);color:var(--text)}
+.fw-btn{border:none;border-radius:999px;padding:14px 22px;font-size:15px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:.15s;background:var(--card);color:var(--text);box-shadow:var(--shadow)}
 .fw-btn:disabled{opacity:.35;cursor:not-allowed}
-.fw-btn:not(:disabled):hover{border-color:var(--muted)}
-.fw-btn.solid{background:var(--text);color:var(--bg1);border-color:var(--text)}
-.fw-btn.solid:not(:disabled):hover{opacity:.85}
-.fw-btn.outline{background:rgba(255,255,255,.2);color:#fff;border:none}
-.fw-btn.outline:hover{background:rgba(255,255,255,.3)}
-.fw-btn.ghost{background:var(--card);color:var(--text)}
-.fw-btn.danger{background:none;border-color:rgba(228,75,74,.3);color:#E24B4A}
+.fw-btn:not(:disabled):hover{transform:translateY(-1px)}
+.fw-btn.solid{background:var(--text);color:var(--bg1);box-shadow:0 4px 14px -4px rgba(42,36,32,.4)}
+.fw-btn.solid:not(:disabled):hover{opacity:.9}
+.fw-btn.outline{background:rgba(255,255,255,.9);color:var(--text);box-shadow:var(--shadow)}
+.fw-btn.ghost{background:var(--card);color:var(--text);box-shadow:var(--shadow)}
+.fw-btn.danger{background:rgba(233,120,90,.1);color:var(--accent);box-shadow:none}
 .fw-btn.wide{width:100%}
-.fw-btn.sm{padding:8px 13px;font-size:13px}
+.fw-btn.sm{padding:10px 16px;font-size:13px}
 .fw-btn.pulse{animation:fwpulse 1.4s infinite}
 
 /* onboarding */
-.fw-onb{min-height:100vh;display:grid;place-items:center;padding:20px;padding-top:calc(env(safe-area-inset-top,20px) + 10px);background:var(--bg1)}
-.fw-onb-card{max-width:480px;width:100%;background:var(--card);border-radius:16px;padding:28px 24px;border:.5px solid var(--line);position:relative;overflow:hidden}
+.fw-onb{min-height:100vh;display:grid;place-items:center;padding:20px;padding-top:calc(env(safe-area-inset-top,20px) + 10px);background:linear-gradient(180deg,#F4E2D6,var(--bg1) 60%)}
+.fw-onb-card{max-width:480px;width:100%;background:var(--card);border-radius:32px;padding:32px 26px;box-shadow:0 20px 50px -15px rgba(60,40,30,.2);position:relative;overflow:hidden}
+.fw-onb-back{display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--muted);font-size:13px;font-weight:500;cursor:pointer;padding:0;margin-bottom:16px;font-family:'DM Sans',sans-serif}
+.fw-onb-back:hover{color:var(--text)}
 .fw-onb-glow{display:none}
-.fw-onb-lead{color:var(--muted);font-size:13px;line-height:1.55;margin:10px 0 18px}
-.fw-onb-h{font-weight:500;font-size:20px;display:flex;align-items:center;gap:9px}
-.fw-onb-h svg{color:var(--muted)}
+.fw-onb-lead{color:var(--muted);font-size:15px;line-height:1.55;margin:10px 0 20px}
+.fw-onb-h{font-family:'Newsreader',Georgia,serif;font-weight:400;font-size:26px;display:flex;align-items:center;gap:9px;letter-spacing:-.02em}
+.fw-onb-h svg{color:var(--accent)}
 .fw-templates{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
 .fw-tmpl{border:1.5px solid var(--line);background:var(--card2);border-radius:15px;padding:13px;cursor:pointer;display:flex;flex-direction:column;gap:4px;color:var(--text);transition:.18s;text-align:left}
 .fw-tmpl svg{margin-bottom:2px}
@@ -2805,19 +2929,20 @@ const CSS = `
 
 /* splash screen */
 .fw-splash-icon-wrap{display:flex;justify-content:center;margin-bottom:12px}
-.fw-splash-icon{width:64px;height:64px;border-radius:16px;background:var(--text);display:flex;align-items:center;justify-content:center;color:var(--bg1);font-weight:500;font-size:24px;letter-spacing:-.5px;line-height:1}
-.fw-splash-tagline{font-weight:500;font-size:26px;line-height:1.18;text-align:center;margin:6px 0 8px;letter-spacing:-.5px}
-.fw-splash-feats{display:flex;flex-direction:column;gap:8px;margin:14px 0 20px}
-.fw-splash-feat{display:flex;align-items:center;gap:12px;background:var(--card2);border-radius:10px;padding:10px 12px;border:.5px solid var(--line)}
-.fw-splash-feat-ico{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;color:#fff;flex-shrink:0}
-.fw-splash-feat-title{font-weight:500;font-size:13px;margin-bottom:1px}
-.fw-splash-feat-desc{font-size:11px;color:var(--muted)}
+.fw-splash-icon{width:72px;height:72px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-family:'Newsreader',Georgia,serif;font-weight:400;font-size:28px;letter-spacing:-.02em;line-height:1;box-shadow:0 8px 24px -8px rgba(233,120,90,.5)}
+.fw-splash-tagline{font-weight:400;font-size:28px;line-height:1.1;text-align:center;margin:8px 0 14px;letter-spacing:-.02em;color:var(--text)}
+.fw-splash-feats{display:flex;flex-direction:column;gap:10px;margin:16px 0 22px}
+.fw-splash-feat{display:flex;align-items:center;gap:14px;background:var(--bg1);border-radius:20px;padding:14px 16px}
+.fw-splash-feat-ico{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:#fff;flex-shrink:0}
+.fw-splash-feat-emoji{width:42px;height:42px;border-radius:50%;background:var(--bg2);display:grid;place-items:center;font-size:20px;flex-shrink:0}
+.fw-splash-feat-title{font-weight:600;font-size:15px;margin-bottom:2px;color:var(--text)}
+.fw-splash-feat-desc{font-size:12px;color:var(--muted)}
 .fw-splash-hint{text-align:center;color:var(--muted);font-size:12px;margin-top:8px}
 
 /* bottom sheet / modal overlay */
-.fw-sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:flex;align-items:flex-end;justify-content:center}
-.fw-sheet{background:var(--card);border-radius:16px 16px 0 0;width:100%;max-width:560px;padding:12px 20px 32px;display:flex;flex-direction:column;gap:12px}
-.fw-sheet-handle{width:36px;height:3px;border-radius:999px;background:var(--line);margin:0 auto 4px}
+.fw-sheet-bg{position:fixed;inset:0;background:rgba(42,36,32,.4);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.fw-sheet{background:var(--bg1);border-radius:28px 28px 0 0;width:100%;max-width:560px;padding:14px 22px 36px;display:flex;flex-direction:column;gap:14px}
+.fw-sheet-handle{width:40px;height:4px;border-radius:999px;background:var(--line);margin:0 auto 6px}
 .fw-sheet-hdr{display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--line)}
 .fw-sheet-hdr-ico{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;color:#fff;flex-shrink:0}
 .fw-sheet-hdr-text{flex:1}
@@ -2827,12 +2952,12 @@ const CSS = `
 .fw-sheet-actions{display:flex;gap:8px;margin-top:4px}
 
 /* login */
-.fw-login-icon{width:56px;height:56px;border-radius:18px;background:linear-gradient(135deg,#7c5cff,#36c5ff);display:grid;place-items:center;color:#fff;margin:0 auto 12px}
+.fw-login-icon{width:56px;height:56px;border-radius:18px;background:linear-gradient(135deg,var(--accent),#36c5ff);display:grid;place-items:center;color:#fff;margin:0 auto 12px}
 .fw-login-title{font-family:'Outfit';font-weight:800;font-size:22px;text-align:center;margin:0 0 6px}
 .fw-login-lead{color:var(--muted);font-size:13.5px;line-height:1.5;text-align:center;margin:0 0 18px}
 .fw-login-google,.fw-login-apple{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;border-radius:14px;padding:13px 16px;font-weight:700;font-size:14.5px;cursor:pointer;transition:.18s;border:none;margin-bottom:10px}
 .fw-login-google{border:1.5px solid var(--line);background:var(--card);color:var(--text)}
-.fw-login-google:hover{border-color:#7c5cff;transform:translateY(-1px)}
+.fw-login-google:hover{border-color:var(--accent);transform:translateY(-1px)}
 .fw-login-apple{background:#1d1b2e;color:#fff}
 .fw-dark .fw-login-apple{background:#f2f0fb;color:#1d1b2e}
 .fw-login-apple:hover{transform:translateY(-1px);opacity:.92}
@@ -2841,9 +2966,9 @@ const CSS = `
 .fw-login-note{text-align:center;color:var(--muted);font-size:11.5px;margin-top:12px}
 
 /* overlay / timer */
-.fw-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);display:grid;place-items:center;z-index:50;padding:20px}
-.fw-timer{background:var(--card);border-radius:20px;padding:30px 26px;text-align:center;position:relative;max-width:380px;width:100%;display:flex;flex-direction:column;align-items:center;border:.5px solid var(--line)}
-.fw-overlay-close{position:absolute;top:16px;right:16px;border:.5px solid var(--line);background:var(--card);width:32px;height:32px;border-radius:8px;display:grid;place-items:center;cursor:pointer;color:var(--muted)}
+.fw-overlay{position:fixed;inset:0;background:rgba(42,36,32,.5);backdrop-filter:blur(8px);display:grid;place-items:center;z-index:50;padding:20px}
+.fw-timer{background:var(--bg1);border-radius:32px;padding:34px 28px;text-align:center;position:relative;max-width:380px;width:100%;display:flex;flex-direction:column;align-items:center;box-shadow:0 20px 50px -15px rgba(42,36,32,.4)}
+.fw-overlay-close{position:absolute;top:18px;right:18px;border:none;background:var(--bg2);width:36px;height:36px;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:var(--muted)}
 .fw-timer-eyebrow{font-weight:500;font-size:16px;margin-bottom:18px;display:flex;align-items:center;justify-content:center;gap:9px;width:100%}
 .fw-phase{font-size:10px;padding:3px 8px;border-radius:4px;font-weight:500}
 .fw-phase.work{background:var(--card2);color:var(--text)}
@@ -2854,17 +2979,50 @@ const CSS = `
 .fw-timer-btns{display:flex;gap:11px;margin-top:24px;justify-content:center;width:100%}
 
 /* replan banner */
-.fw-replan{position:fixed;bottom:84px;left:14px;right:14px;max-width:534px;margin:0 auto;background:var(--card);border-radius:12px;padding:14px 16px;border:.5px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;z-index:30}
+/* quest detail */
+.fw-quest-detail{width:100%;max-width:420px;background:var(--bg1);border-radius:32px;overflow:hidden;box-shadow:0 20px 50px -15px rgba(42,36,32,.4);max-height:90vh;display:flex;flex-direction:column}
+.fw-qd-hero{height:280px;position:relative;display:flex;flex-direction:column;justify-content:flex-end;padding:26px;color:#fff}
+.fw-qd-back{position:absolute;top:18px;left:20px;width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.25);display:grid;place-items:center;color:#fff;border:none;cursor:pointer}
+.fw-qd-emoji{position:absolute;top:40px;right:30px;opacity:.5;color:rgba(255,255,255,.6)}
+.fw-qd-xp-pill{display:inline-block;background:rgba(255,255,255,.9);color:var(--accent);font-size:12px;font-weight:700;padding:6px 14px;border-radius:999px;margin-bottom:12px;width:fit-content}
+.fw-qd-title{font-size:34px;line-height:1.08;letter-spacing:-.02em;font-weight:400;color:#fff}
+.fw-qd-body{padding:26px;display:flex;flex-direction:column;flex:1}
+.fw-qd-meta{display:flex;gap:24px;margin-bottom:20px}
+.fw-qd-meta-label{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.1em}
+.fw-qd-meta-value{font-size:16px;font-weight:600;color:var(--text);margin-top:3px}
+.fw-qd-desc{font-size:15px;color:var(--muted);line-height:1.55;margin-bottom:20px}
+.fw-qd-secondary{background:none;border:none;color:var(--muted);font-size:14px;font-weight:500;cursor:pointer;text-align:center;padding:12px;margin-top:8px}
+.fw-qd-done-badge{text-align:center;font-size:16px;font-weight:600;color:var(--sage);padding:20px;background:rgba(127,160,138,.1);border-radius:20px;margin-top:auto}
+
+/* level up */
+.fw-levelup{width:100%;max-width:420px;background:linear-gradient(180deg,var(--accent),#C85638);border-radius:32px;padding:40px 34px;text-align:center;color:#fff;position:relative;overflow:hidden}
+.fw-levelup-sparkle{position:absolute;font-size:22px;pointer-events:none;animation:fwpulse 2s infinite}
+.fw-levelup-ring{width:170px;height:170px;border-radius:50%;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;margin:30px auto}
+.fw-levelup-circle{width:118px;height:118px;border-radius:50%;background:var(--bg1);display:flex;align-items:center;justify-content:center;box-shadow:0 14px 30px -8px rgba(0,0,0,.3)}
+.fw-levelup-num{font-size:54px;color:var(--accent);font-weight:600}
+.fw-levelup-label{font-size:14px;font-weight:700;color:rgba(255,255,255,.85);letter-spacing:.18em;margin-top:10px}
+.fw-levelup-title{font-size:38px;line-height:1.08;letter-spacing:-.02em;margin-top:8px;font-weight:400}
+.fw-levelup-sub{font-size:15px;color:rgba(255,255,255,.85);margin-top:14px;line-height:1.5}
+.fw-levelup-badges{display:flex;gap:14px;justify-content:center;margin-top:26px}
+.fw-levelup-badge{width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,.95);display:flex;align-items:center;justify-content:center;font-size:26px}
+.fw-levelup-badge.locked{background:rgba(255,255,255,.3)}
+
+/* nav center button */
+.fw-nav-center{width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;border:none;display:grid;place-items:center;cursor:pointer;margin-top:-22px;box-shadow:0 8px 18px -6px rgba(233,120,90,.6);transition:.15s}
+.fw-nav-center:hover{transform:translateY(-2px)}
+.fw-navi-emoji{font-size:22px}
+
+.fw-replan{position:fixed;bottom:84px;left:14px;right:14px;max-width:534px;margin:0 auto;background:var(--card);border-radius:24px;padding:16px 20px;box-shadow:0 12px 30px -8px rgba(42,36,32,.3);display:flex;justify-content:space-between;align-items:center;gap:12px;z-index:30}
 .fw-replan strong{font-size:13px;font-weight:500;display:block}
 .fw-replan span{color:var(--muted);font-size:12px}
 .fw-replan-btns{display:flex;gap:8px;flex-shrink:0}
 
 /* toast */
-.fw-toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg1);padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;z-index:60;animation:fwtoast .3s;white-space:nowrap}
+.fw-toast{position:fixed;top:env(safe-area-inset-top,18px);left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg1);padding:12px 22px;border-radius:999px;font-size:14px;font-weight:600;z-index:60;animation:fwtoast .3s;white-space:nowrap;box-shadow:0 8px 20px -6px rgba(42,36,32,.4);margin-top:8px}
 
 /* weekly review */
-.fw-review{background:var(--card);border-radius:20px;padding:28px 24px;text-align:center;max-width:380px;width:100%;border:.5px solid var(--line)}
-.fw-review-badge{width:56px;height:56px;border-radius:14px;display:grid;place-items:center;color:#fff;margin:0 auto 14px}
+.fw-review{background:var(--bg1);border-radius:32px;padding:32px 28px;text-align:center;max-width:380px;width:100%;box-shadow:0 20px 50px -15px rgba(42,36,32,.4)}
+.fw-review-badge{width:60px;height:60px;border-radius:50%;display:grid;place-items:center;color:#fff;margin:0 auto 16px}
 .fw-review-week{font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px}
 .fw-review-headline{font-weight:500;font-size:20px;margin-bottom:18px}
 .fw-review-ring{display:flex;justify-content:center;margin-bottom:18px}
@@ -2889,13 +3047,13 @@ const CSS = `
 .fw-plan-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:11px 14px;background:none;border:none;font-size:13px;color:var(--text);cursor:pointer;text-align:left;transition:.15s}
 .fw-plan-menu button:hover{background:var(--card2)}
 .fw-plan-menu-confirm{padding:12px 16px;border-top:1px solid var(--line);font-size:13px;font-weight:600;color:var(--text)}
-.fw-plan-confirm-yes{flex:1;padding:6px 12px;border-radius:8px;border:none;background:linear-gradient(90deg,#7c5cff,#36c5ff);color:#fff;font-size:13px;font-weight:700;cursor:pointer}
+.fw-plan-confirm-yes{flex:1;padding:6px 12px;border-radius:8px;border:none;background:linear-gradient(90deg,var(--accent),#36c5ff);color:#fff;font-size:13px;font-weight:700;cursor:pointer}
 .fw-plan-confirm-no{flex:1;padding:6px 12px;border-radius:8px;border:1.5px solid var(--line);background:none;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer}
 
 /* export dropdown */
 .fw-export-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:40;background:var(--card);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);min-width:200px;overflow:hidden;border:1px solid var(--line)}
 .fw-export-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:12px 16px;background:none;border:none;font-size:14px;color:var(--text);cursor:pointer;text-align:left;transition:.15s}
-.fw-export-menu button:hover{background:var(--card2);color:#7c5cff}
+.fw-export-menu button:hover{background:var(--card2);color:var(--accent)}
 .fw-export-menu button+button{border-top:.5px solid var(--line)}
 .fw-export-menu button.active{font-weight:500;color:var(--text)}
 
@@ -2912,11 +3070,11 @@ const CSS = `
 
 /* stats chips + tabs */
 .fw-stats-chips{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
-.fw-stats-chip{display:flex;align-items:center;gap:5px;padding:6px 12px;background:var(--card2);border-radius:6px;font-size:12px;font-weight:500;color:var(--text);border:.5px solid var(--line)}
-.fw-stats-chip svg{color:var(--muted)}
-.fw-stats-tabs{display:flex;gap:0;border:.5px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:12px}
-.fw-stats-tab{flex:1;border:none;background:none;padding:8px;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;transition:.15s}
-.fw-stats-tab.active{background:var(--text);color:var(--bg1)}
+.fw-stats-chip{display:flex;align-items:center;gap:6px;padding:8px 14px;background:var(--card);border-radius:999px;font-size:13px;font-weight:600;color:var(--text);box-shadow:var(--shadow)}
+.fw-stats-chip svg{color:var(--accent)}
+.fw-stats-tabs{display:flex;gap:4px;background:var(--bg2);border-radius:999px;padding:4px;margin-bottom:14px}
+.fw-stats-tab{flex:1;border:none;background:none;padding:10px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;transition:.15s;border-radius:999px}
+.fw-stats-tab.active{background:var(--card);color:var(--text);box-shadow:var(--shadow)}
 
 /* per-goal stat rows */
 .fw-goal-stat-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
@@ -2925,17 +3083,17 @@ const CSS = `
 .fw-goal-stat-body{flex:1;min-width:0}
 .fw-goal-stat-name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fw-goal-stat-sub{font-size:11px;color:var(--muted);margin-top:1px}
-.fw-goal-stat-xp{font-size:12px;font-weight:700;color:#7c5cff;flex-shrink:0}
+.fw-goal-stat-xp{font-size:12px;font-weight:700;color:var(--accent);flex-shrink:0}
 
 /* note modal */
 .fw-note-mood-row{display:flex;gap:10px;justify-content:center;margin:8px 0 14px}
 .fw-mood-btn{font-size:26px;border:2px solid transparent;border-radius:12px;padding:6px 10px;background:var(--card2);cursor:pointer;transition:.15s;line-height:1}
-.fw-mood-btn.active{border-color:#7c5cff;background:rgba(124,92,255,.12)}
+.fw-mood-btn.active{border-color:var(--accent);background:rgba(124,92,255,.12)}
 .fw-note-area{width:100%;border:1.5px solid var(--line);background:var(--card2);border-radius:14px;padding:12px 14px;font-size:14px;color:var(--text);resize:none;font-family:inherit;line-height:1.6;box-sizing:border-box}
-.fw-note-area:focus{outline:none;border-color:#7c5cff}
-.fw-mini.note{color:#7c5cff}
+.fw-note-area:focus{outline:none;border-color:var(--accent)}
+.fw-mini.note{color:var(--accent)}
 .fw-row-mood{margin-left:6px;font-size:16px}
-.fw-row-note-preview{font-size:11px;color:rgba(255,255,255,.6);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+.fw-row-note-preview{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
 
 /* notes view */
 .fw-notes-goal{border-bottom:1px solid var(--line)}
@@ -2987,19 +3145,22 @@ const CSS = `
 .fw-splash-or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:14px 0 10px}
 .fw-splash-or::before,.fw-splash-or::after{content:'';flex:1;height:1px;background:var(--line)}
 .fw-splash-email-btn{width:100%;border:1.5px solid var(--line);background:none;border-radius:13px;padding:11px;font-size:14px;font-weight:600;color:var(--text);cursor:pointer;transition:.15s;margin-bottom:8px}
-.fw-splash-email-btn:hover{border-color:#7c5cff;color:#7c5cff}
+.fw-splash-email-btn:hover{border-color:var(--accent);color:var(--accent)}
 .fw-splash-socials{display:flex;gap:9px;margin-top:4px}
 .fw-social-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px solid var(--line);background:var(--card2);border-radius:13px;padding:11px;font-size:13.5px;font-weight:700;cursor:pointer;color:var(--text);transition:.15s}
-.fw-social-btn:hover{border-color:#7c5cff;transform:translateY(-1px)}
+.fw-social-btn:hover{border-color:var(--accent);transform:translateY(-1px)}
 .fw-social-btn.apple{background:#1d1b2e;color:#fff;border-color:transparent}
 .fw-dark .fw-social-btn.apple{background:#f2f0fb;color:#1d1b2e}
 .fw-email-form{display:flex;flex-direction:column;gap:8px;width:100%;margin-bottom:4px}
 .fw-email-form input{border:1.5px solid var(--line);background:var(--card2);border-radius:12px;padding:11px 13px;font-size:14px;color:var(--text);width:100%}
-.fw-email-form input:focus{outline:none;border-color:#7c5cff}
+.fw-email-form input:focus{outline:none;border-color:var(--accent)}
 .fw-email-mode{display:flex;gap:6px}
 .fw-mode-btn{flex:1;border:1.5px solid var(--line);background:none;border-radius:10px;padding:8px;font-size:13px;font-weight:700;cursor:pointer;color:var(--muted);transition:.15s}
-.fw-mode-btn.active{border-color:#7c5cff;color:#7c5cff;background:rgba(124,92,255,.1)}
+.fw-mode-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(124,92,255,.1)}
 .fw-auth-error{font-size:12.5px;color:#ff5a5a;text-align:center;padding:2px 0}
+.fw-auth-success{font-size:12.5px;color:#18c29c;text-align:center;padding:4px 0}
+.fw-reset-link{background:none;border:none;color:var(--muted);font-size:12.5px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;padding:0;font-family:inherit}
+.fw-reset-link:hover{color:var(--text)}
 .fw-auth-notice{font-size:12px;color:var(--muted);text-align:center;padding:6px 10px;background:var(--card2);border-radius:10px;margin-bottom:6px}
 
 /* custom goal pill (added goals in onboarding) */
@@ -3016,23 +3177,23 @@ const CSS = `
 .fw-custom-goal-ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:#fff;flex-shrink:0}
 .fw-custom-goal-form{padding:0 14px 14px;display:flex;flex-direction:column;gap:0}
 .fw-cg-name{width:100%;border:1.5px solid var(--line);background:var(--card2);border-radius:11px;padding:10px 12px;font-size:15px;font-weight:700;font-family:'Outfit';color:var(--text);margin-bottom:8px}
-.fw-cg-name:focus{outline:none;border-color:#7c5cff}
+.fw-cg-name:focus{outline:none;border-color:var(--accent)}
 .fw-cg-desc{width:100%;border:1.5px solid var(--line);background:var(--card2);border-radius:11px;padding:9px 12px;font-size:13px;color:var(--text);margin-bottom:10px}
-.fw-cg-desc:focus{outline:none;border-color:#7c5cff}
-.fw-cg-icons{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}
-.fw-cg-icon{width:34px;height:34px;border-radius:10px;border:1.5px solid var(--line);background:var(--card2);display:grid;place-items:center;cursor:pointer;color:var(--text);transition:.15s}
-.fw-cg-icon:hover{border-color:#7c5cff}
+.fw-cg-desc:focus{outline:none;border-color:var(--accent)}
+.fw-cg-icons{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
+.fw-cg-icon{width:30px;height:30px;border-radius:8px;border:1.5px solid var(--line);background:var(--card2);display:grid;place-items:center;cursor:pointer;color:var(--text);transition:.15s;flex-shrink:0}
+.fw-cg-icon:hover{border-color:var(--accent)}
 .fw-cg-icon.sel{border-color:transparent}
 .fw-cg-row{display:flex;align-items:center;gap:10px}
 
 /* drag & drop */
-.fw-day.drag-over{outline:2px solid #7c5cff;background:rgba(124,92,255,.05)}
+.fw-day.drag-over{outline:2px solid var(--accent);background:rgba(124,92,255,.05)}
 .fw-week-card.dragging{opacity:.4}
 .fw-week-card[draggable=true]{cursor:grab}
 .fw-week-card[draggable=true]:active{cursor:grabbing}
-.fw-drag-handle{color:rgba(255,255,255,.4);font-size:14px;margin-right:2px;cursor:grab;user-select:none;line-height:1}
+.fw-drag-handle{color:var(--line);font-size:14px;margin-right:2px;cursor:grab;user-select:none;line-height:1}
 .fw-day-add{border:none;background:none;color:var(--muted);cursor:pointer;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;transition:.15s}
-.fw-day-add:hover{background:rgba(124,92,255,.12);color:#7c5cff}
+.fw-day-add:hover{background:rgba(124,92,255,.12);color:var(--accent)}
 
 /* session modal */
 .fw-session-modal{background:var(--card);border-radius:24px 24px 0 0;padding:22px 20px 32px;width:100%;max-width:560px;position:fixed;bottom:0;left:50%;transform:translateX(-50%);box-shadow:0 -12px 40px rgba(0,0,0,.25);z-index:55;animation:fw-slide-up .25s ease}
@@ -3042,7 +3203,7 @@ const CSS = `
 .fw-sm-group{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
 .fw-sm-group label{font-size:11.5px;font-weight:700;color:var(--muted)}
 .fw-sm-group select,.fw-sm-group input{border:1.5px solid var(--line);background:var(--card2);border-radius:11px;padding:9px 11px;font-size:14px;color:var(--text);width:100%}
-.fw-sm-group select:focus,.fw-sm-group input:focus{outline:none;border-color:#7c5cff}
+.fw-sm-group select:focus,.fw-sm-group input:focus{outline:none;border-color:var(--accent)}
 .fw-sm-row{display:flex;gap:12px}
 .fw-sm-toggle{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line);margin-top:4px}
 
@@ -3054,7 +3215,7 @@ const CSS = `
 /* calendar upload */
 .fw-cal-upload-row{display:flex;align-items:center;gap:6px;margin-bottom:8px}
 .fw-cal-upload-icon{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;border:1.5px solid var(--line);color:var(--muted);cursor:pointer;transition:.15s}
-.fw-cal-upload-icon:hover{border-color:#7c5cff;color:#7c5cff}
+.fw-cal-upload-icon:hover{border-color:var(--accent);color:var(--accent)}
 .fw-cal-preview{border-radius:14px;overflow:hidden;margin-bottom:12px;max-height:200px;border:1.5px solid var(--line)}
 .fw-cal-preview img{width:100%;object-fit:cover;display:block}
 .fw-busy-list{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}

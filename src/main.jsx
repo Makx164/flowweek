@@ -28,7 +28,8 @@ function Root() {
 
   useEffect(() => {
     window.__showLegal = showLegal;
-    return () => { delete window.__showLegal; };
+    window.__goToLanding = () => { localStorage.removeItem("fw:enter"); setView("landing"); };
+    return () => { delete window.__showLegal; delete window.__goToLanding; };
   }, [showLegal]);
 
   const enterApp = () => {
