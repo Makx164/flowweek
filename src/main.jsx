@@ -4,11 +4,8 @@ import "./index.css";
 import FlowWeekApp from "./FlowWeek.jsx";
 import Landing from "./Landing.jsx";
 import { PrivacyPolicy, TermsOfService } from "./Legal.jsx";
-import AdminDashboard from "./Admin.jsx";
-
 function Root() {
   const [view, setView] = useState(() => {
-    if (window.location.hash === "#admin") return "admin";
     try {
       const s = localStorage.getItem("sidequest:v1") || localStorage.getItem("flowweek:v1");
       if (s) {
@@ -39,7 +36,6 @@ function Root() {
 
   const goBack = () => setView(returnTo);
 
-  if (view === "admin") return <AdminDashboard onBack={() => setView("app")} />;
   if (view === "privacy") return <PrivacyPolicy onBack={goBack} />;
   if (view === "terms") return <TermsOfService onBack={goBack} />;
   if (view === "app") return <FlowWeekApp />;
