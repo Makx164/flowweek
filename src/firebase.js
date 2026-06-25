@@ -3,6 +3,7 @@ import {
   getAuth, GoogleAuthProvider, OAuthProvider,
   signInWithPopup, signOut, onAuthStateChanged,
   signInWithEmailAndPassword, createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
 } from "firebase/auth";
 import { getFirestore, doc, getDoc, setDoc, deleteDoc } from "firebase/firestore";
 
@@ -39,6 +40,9 @@ export const signInEmail = (email, password) =>
 
 export const signUpEmail = (email, password) =>
   createUserWithEmailAndPassword(_auth, email, password);
+
+export const resetPassword = (email) =>
+  sendPasswordResetEmail(_auth, email);
 
 export const onAuth = (cb) => {
   if (!fbReady) { setTimeout(() => cb(null), 0); return () => {}; }
