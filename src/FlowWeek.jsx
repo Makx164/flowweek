@@ -389,7 +389,7 @@ function planWeek(goals, sessions, availability) {
         }
       }
       if (chosen == null) break;
-      const s = { id: uid(), goalId: g.id, day: chosen, start, durationMin: g.durationMin, status: "suggested", hasTimer: g.hasTimer ?? true };
+      const s = { id: uid(), goalId: g.id, day: chosen, start, durationMin: g.durationMin, status: "planned", hasTimer: g.hasTimer ?? true };
       placed.push(s); created.push(s); usedDays.add(chosen); need--;
     }
   }
@@ -404,7 +404,7 @@ function findReplacement(goal, sessions, availability, fromDay, excludeDay, excl
     if (d === excludeDay) occ.push([excludeStart, excludeStart + goal.durationMin]);
     let st = findSlot(goal.durationMin, windowFor(goal.pref, wake), occ);
     if (st == null) st = findSlot(goal.durationMin, wake, occ);
-    if (st != null) return { id: uid(), goalId: goal.id, day: d, start: st, durationMin: goal.durationMin, status: "suggested", hasTimer: goal.hasTimer ?? true };
+    if (st != null) return { id: uid(), goalId: goal.id, day: d, start: st, durationMin: goal.durationMin, status: "planned", hasTimer: goal.hasTimer ?? true };
   }
   return null;
 }
@@ -590,6 +590,7 @@ export default function App() {
   const [replan, setReplan]                     = useState(null);
   const [gamification, setGamification]         = useState(true);
   const [exportMode, setExportMode]             = useState("google");
+  const [quickAdd, setQuickAdd]                 = useState(false);
   const [questDetail, setQuestDetail]           = useState(null);
   const [levelUp, setLevelUp]                   = useState(null);
 
@@ -693,7 +694,7 @@ export default function App() {
       const now = new Date();
       const nowMin = now.getHours() * 60 + now.getMinutes();
       const di = todayIndex();
-      sessions.filter(s => s.day === di && (s.status === "planned" || s.status === "suggested")).forEach(s => {
+      sessions.filter(s => s.day === di && s.status === "planned").forEach(s => {
         const key = `${s.id}-${di}`;
         if (nowMin >= s.start-15 && nowMin < s.start-13 && !firedNotifsRef.current.has(key)) {
           firedNotifsRef.current.add(key);
@@ -754,8 +755,6 @@ export default function App() {
     setReplan(null);
   };
 
-  const acceptSuggestion  = (id) => setSessions(prev => prev.map(s => s.id === id ? { ...s, status:"planned" } : s));
-  const acceptAll         = () => setSessions(prev => prev.map(s => s.status === "suggested" ? { ...s, status:"planned" } : s));
   const removeSession     = (id) => setSessions(prev => prev.filter(s => s.id !== id));
   const shiftSess = (sess, delta) => {
     const shifted = shiftSession(sess, delta, sessions, availability);
@@ -801,10 +800,10 @@ export default function App() {
     if (reset) {
       const fresh = planWeek(goals, [], availability);
       setSessions(fresh);
-      flash(`Woche neu geplant: ${fresh.length} Vorschläge`);
+      flash(`Woche neu geplant: ${fresh.length} Einheiten`);
     } else {
       const created = planWeek(goals, sessions, availability);
-      if (created.length) { setSessions(prev => [...prev, ...created]); flash(`${created.length} Einheiten vorgeschlagen`); }
+      if (created.length) { setSessions(prev => [...prev, ...created]); flash(`${created.length} Einheiten geplant`); }
       else flash("Alles schon geplant 🎉");
     }
   };
@@ -848,12 +847,12 @@ export default function App() {
             <AppHeader level={level} xp={stats.xp} dark={dark} setDark={setDark} onLevelClick={() => setStatsOpen(true)} gamification={gamification} />
             <main className="fw-main">
               {view === "today"    && <TodayView {...{ goals, sessions, stats, level, setActive, completeSession, skipSession, goalById, addNote, gamification, exportMode, setQuestDetail }} />}
-              {view === "week"     && <WeekView  {...{ goals, sessions, availability, runPlan, acceptSuggestion, acceptAll, skipSession, rescheduleSession, removeSession, completeSession, setActive, goalById, shiftSess, moveSession, addManualSession, editSession, addNote, exportMode, setExportMode }} />}
+              {view === "week"     && <WeekView  {...{ goals, sessions, availability, runPlan, skipSession, rescheduleSession, removeSession, completeSession, setActive, goalById, shiftSess, moveSession, addManualSession, editSession, addNote, exportMode, setExportMode }} />}
               {view === "goals"    && <GoalsView {...{ goals, setGoals, stats, weekHistory, sessions, gamification }} />}
               {view === "notes"    && <NotesView {...{ goals, sessions, goalById, addNote }} />}
               {view === "settings" && <SettingsView {...{ availability, setAvailability, pomo, setPomo, dark, setDark, notificationsEnabled, setNotificationsEnabled, requestNotifPermission, lang, setLang, user, skippedAuth, handleSkipAuth, gamification, setGamification, reset: () => { setOnboarded(false); setGoals([]); setSessions([]); setWeekHistory([]); setStats({ xp:0,done:0,streaks:{},morningDone:false,currentWeekKey:getMondayKey() }); cloudSyncedRef.current=false; }}} />}
             </main>
-            <AppNav view={view} setView={setView} />
+            <AppNav view={view} setView={setView} onQuickAdd={() => setQuickAdd(true)} />
           </div>
         )}
 
@@ -890,6 +889,17 @@ export default function App() {
             </div>
           </div>
         )}
+        {quickAdd && (
+          <SessionModal
+            modal={{ mode:"add", day: todayIndex() }}
+            goals={goals}
+            sessions={sessions}
+            availability={availability}
+            onAdd={addManualSession}
+            onEdit={editSession}
+            onClose={() => setQuickAdd(false)}
+          />
+        )}
       </div>
     </LangCtx.Provider>
   );
@@ -911,7 +921,7 @@ function AppHeader({ level, xp, dark, setDark, onLevelClick, gamification }) {
     </header>
   );
 }
-function AppNav({ view, setView }) {
+function AppNav({ view, setView, onQuickAdd }) {
   return (
     <nav className="fw-nav">
       <button className={view === "today" ? "fw-navi active" : "fw-navi"} onClick={() => setView("today")}>
@@ -920,7 +930,7 @@ function AppNav({ view, setView }) {
       <button className={view === "week" ? "fw-navi active" : "fw-navi"} onClick={() => setView("week")}>
         <span className="fw-navi-emoji">🗓️</span>
       </button>
-      <button className="fw-nav-center" onClick={() => setView("week")}>
+      <button className="fw-nav-center" onClick={onQuickAdd}>
         <Plus size={24} />
       </button>
       <button className={view === "goals" ? "fw-navi active" : "fw-navi"} onClick={() => setView("goals")}>
@@ -1574,7 +1584,7 @@ function SessionCalBtn({ sess, name, exportMode }) {
 }
 
 /* --------------------------------- week ---------------------------------- */
-function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSuggestion, skipSession,
+function WeekView({ goals, sessions, availability, runPlan, skipSession,
   rescheduleSession, removeSession, completeSession, setActive, goalById, shiftSess,
   moveSession, addManualSession, editSession, addNote, exportMode, setExportMode }) {
   const t = useT();
@@ -1584,7 +1594,6 @@ function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSug
   const [planMenu, setPlanMenu]   = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
 
-  const hasSuggestions = sessions.some(s => s.status === "suggested");
   const planned = sessions.filter(s => s.status === "planned" || s.status === "done");
 
   const handleDragStart = (e, id) => {
@@ -1629,12 +1638,6 @@ function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSug
         </div>
         <CalendarExportMenu planned={planned} goals={goals} exportMode={exportMode} setExportMode={setExportMode} />
       </div>
-      {hasSuggestions && (
-        <div className="fw-suggest-banner">
-          <span><Sparkles size={15} /> {t("suggestBanner")}</span>
-          <button className="fw-btn solid sm" onClick={acceptAll}>{t("acceptAll")}</button>
-        </div>
-      )}
       {t("daysFull").map((dayName, i) => {
         const day = sessions.filter(s => s.day === i && s.status !== "skipped").sort((a,b) => a.start - b.start);
         const isToday = i === todayIndex();
@@ -1663,14 +1666,13 @@ function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSug
                 const itype = goal?.type  ?? s.customType  ?? "habit";
                 const [c1, c2] = ACCENTS[color];
                 const I = s.customIconId ? iconById(s.customIconId) : (goal ? goalIcon(goal) : Sparkles);
-                const suggested = s.status === "suggested";
                 const isDragging = dragId === s.id;
                 return (
                   <div key={s.id}
                     draggable={s.status !== "done"}
                     onDragStart={e => handleDragStart(e, s.id)}
                     onDragEnd={() => { setDragId(null); setDragOver(null); }}
-                    className={["fw-week-card", suggested && "suggested", isDragging && "dragging"].filter(Boolean).join(" ")}>
+                    className={["fw-week-card", isDragging && "dragging"].filter(Boolean).join(" ")}>
                     <div className="fw-drag-handle" aria-hidden>⠿</div>
                     <div className="fw-wc-ico" style={{ background:c1 }}><I size={14}/></div>
                     <div className="fw-wc-body">
@@ -1678,25 +1680,17 @@ function WeekView({ goals, sessions, availability, runPlan, acceptAll, acceptSug
                       <div className="fw-wc-sub">{minToLabel(s.start)} · {s.durationMin} min</div>
                     </div>
                     <div className="fw-wc-actions">
-                      {suggested ? (
-                        <>
-                          <button className="fw-mini" title="-30 min" onClick={() => shiftSess(s, -30)}><ChevronLeft size={15}/></button>
-                          <button className="fw-mini" title="+30 min" onClick={() => shiftSess(s, 30)}><ChevronRight size={15}/></button>
-                          <button className="fw-mini" onClick={() => rescheduleSession(s)}><RotateCw size={15}/></button>
-                          <button className="fw-mini ok" onClick={() => acceptSuggestion(s.id)}><Check size={15}/></button>
-                          <button className="fw-mini no" onClick={() => removeSession(s.id)}><X size={15}/></button>
-                        </>
-                      ) : s.status === "done" ? (
+                      {s.status === "done" ? (
                         <>
                           <button className="fw-mini note" onClick={() => setModal({ mode:"note", sess:s })}><FileText size={14}/></button>
                           <SessionCalBtn sess={s} name={name} exportMode={exportMode} />
                         </>
                       ) : (
                         <>
+                          <button className="fw-mini" title="-30 min" onClick={() => shiftSess(s, -30)}><ChevronLeft size={15}/></button>
+                          <button className="fw-mini" title="+30 min" onClick={() => shiftSess(s, 30)}><ChevronRight size={15}/></button>
                           <button className="fw-mini" onClick={() => setModal({ mode:"edit", sess:s })}><Pencil size={14}/></button>
-                          {goalById(s.goalId)?.hasTimer !== false && s.hasTimer !== false && <button className="fw-mini" onClick={() => setActive(s)}><Play size={15}/></button>}
-                          <button className="fw-mini ok" onClick={() => completeSession(s)}><Check size={15}/></button>
-                          <button className="fw-mini no" onClick={() => skipSession(s)}><X size={15}/></button>
+                          <button className="fw-mini no" onClick={() => removeSession(s.id)}><X size={15}/></button>
                         </>
                       )}
                     </div>
